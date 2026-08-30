@@ -1567,6 +1567,9 @@
     document.querySelectorAll('input[type="checkbox"]').forEach((el) => {
       el.checked = el.defaultChecked;
     });
+    document.querySelectorAll("textarea").forEach((el) => {
+      el.value = "";
+    });
     start();
     resizeCanvas();
     setInterval(() => {
@@ -2730,36 +2733,46 @@
     }
   }
   window.xgbResolutionChange = xgbResolutionChange;
+  function seedStatus(msg, isError) {
+    const el = document.getElementById("seedStatus");
+    el.textContent = msg ? "- " + msg : "";
+    el.style.color = isError ? "#E53935" : "#4CAF50";
+  }
   function copySeed() {
     let seed;
     if (trainingMethod === "XGBoost") {
       if (!xgboost || xgboost.trees.length === 0) {
-        alert("Train at least one tree before copying a seed.");
+        seedStatus("train at least one tree first", true);
         return;
       }
       seed = xgboost.toSeed();
     } else if (nnl instanceof NeuralNetworkList) {
+      nnl.resetError();
+      nnl.testErrorTrials(nnl.trialInputsList, nnl.trialOutputsList, nnl.trialPower);
       nnl.sort();
       seed = nnl.neuralNetworks[0].toSeed();
     } else {
       return;
     }
+    document.getElementById("seedBox").value = seed;
     navigator.clipboard.writeText(seed).then(() => {
-      alert("Seed copied to clipboard (" + seed.length + " chars).");
+      seedStatus(`copied ${seed.length} chars`, false);
     }).catch(() => {
-      prompt("Copy the seed below:", seed);
+      seedStatus(`${seed.length} chars, copy from the box`, false);
     });
   }
   window.copySeed = copySeed;
   function loadSeed() {
-    const seed = prompt("Paste seed:");
-    if (!seed)
+    const seed = document.getElementById("seedBox").value.trim();
+    if (!seed) {
+      seedStatus("paste a seed into the box first", true);
       return;
+    }
     try {
-      if (seed.trim().startsWith("XGBSEED1")) {
+      if (seed.startsWith("XGBSEED1")) {
         const ens = XGBoostEnsemble.fromSeed(seed);
         if (ens.inputSize !== inputSize || ens.outputSize !== outputSize) {
-          alert(`Seed is ${ens.inputSize} in ${ens.outputSize} out, but current format is ${inputSize} in ${outputSize} out. Switch the network format first.`);
+          seedStatus(`seed is ${ens.inputSize}in ${ens.outputSize}out, switch network format`, true);
           return;
         }
         if (trainingMethod !== "XGBoost") {
@@ -2773,11 +2786,12 @@
         document.getElementById("shrinkage").value = ens.shrinkage.toString();
         document.getElementById("shrinkageSlider").value = ens.shrinkage.toString();
         document.getElementById("shrinkageDisplay").textContent = ens.shrinkage.toFixed(2);
+        seedStatus(`loaded ${ens.trees.length} trees`, false);
         return;
       }
       const nn = NeuralNetwork.fromSeed(seed);
       if (nn.inputSize !== inputSize || nn.outputSize !== outputSize) {
-        alert(`Seed is ${nn.inputSize} in ${nn.outputSize} out, but current format is ${inputSize} in ${outputSize} out. Switch the network format first.`);
+        seedStatus(`seed is ${nn.inputSize}in ${nn.outputSize}out, switch network format`, true);
         return;
       }
       if (trainingMethod === "XGBoost") {
@@ -2796,8 +2810,10 @@
       }
       nnl.resetBackpropWorker();
       createTrials();
+      seedStatus(`loaded ${hiddenLayerSizes.join(",")} network`, false);
     } catch (e) {
-      alert("Could not load seed: " + e);
+      seedStatus("invalid seed", true);
+      console.error(e);
     }
   }
   window.loadSeed = loadSeed;

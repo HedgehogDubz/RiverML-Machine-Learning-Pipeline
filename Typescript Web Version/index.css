@@ -76,12 +76,21 @@
 
         .sidebar select,
         .sidebar input,
+        .sidebar textarea,
         .sidebar button {
             width: 100%;
             padding: 6px;
             border: 1px solid #ccc;
             border-radius: 4px;
             font-size: 13px;
+        }
+
+        .sidebar textarea {
+            font-family: monospace;
+            font-size: 10px;
+            resize: vertical;
+            white-space: pre;
+            overflow-x: auto;
         }
 
         .sidebar input[type="checkbox"] {

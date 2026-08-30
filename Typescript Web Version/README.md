@@ -11,8 +11,8 @@ npm run dev
 
 ## Seeds
 
-- Copy Seed: copies the current model to the clipboard as a seed string. Neural network methods make an `NNSEED1` seed, XGBoost makes an `XGBSEED1` seed.
-- Load Seed: paste a seed to load that model, switching the training method to match the seed type. The network format (inputs and outputs) has to match.
+- Copy Seed: copies the current model to the clipboard and also drops it in the seed box below the buttons. Neural network methods make an `NNSEED1` seed, XGBoost makes an `XGBSEED1` seed.
+- Load Seed: paste a seed into the seed box, then press Load Seed. The training method switches to match the seed type, and the network format (inputs and outputs) has to match.
 
 Seeds are compatible with the C++ desktop version in both directions.
 

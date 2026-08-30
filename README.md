@@ -5,7 +5,7 @@ Two versions of the same simulator live in this repo:
 - `Typescript Web Version/` runs in the browser (this is what gets deployed to GitHub Pages)
 - `CPP Desktop Version/` is a native desktop build using raylib, much faster for training
 
-Both can export a trained model as a seed string (Copy Seed button) and load one back in (Load Seed). Seeds work across both versions. Each folder also has standalone `neural_network_by_seed` and `xgboost_by_seed` files: one function each that takes a seed and inputs and runs the model, no other files needed.
+Both can export a trained model as a seed string (Copy Seed copies to the clipboard and fills the seed box) and load one back in (paste into the seed box, then Load Seed). Seeds work across both versions. Each folder also has standalone `neural_network_by_seed` and `xgboost_by_seed` files: one function each that takes a seed and inputs and runs the model, no other files needed.
 
 This project started as a simple idea: make machine learning easier to understand by seeing it happen.
 I wanted something lightweight that anyone could run directly in a browser. That’s why this visualizer is built in TypeScript — it keeps everything web-native, easy to run, and accessible without needing extra setup or support.

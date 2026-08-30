@@ -59,8 +59,9 @@ static int gOutputSize = 1;
 static std::vector<int> gHidden = { 7, 10, 20, 20, 10, 7 };
 static Activation gAct = Activation::ReLU;
 static Activation gOutAct = Activation::Tanh;
-static char gHiddenText[64] = "7,10,20,20,10,7";
+static std::string gHiddenText = "7,10,20,20,10,7";
 static bool gHiddenValid = true;
+static std::string gSeedBox;
 
 // XGBoost state
 static XGBoostEnsemble gXgb;
@@ -283,37 +284,88 @@ static float uiSlider(Rectangle r, float minV, float maxV, float value, int id) 
     return value;
 }
 
-// text box for digits and commas, returns true when the value is committed
-static bool gTextFocus = false;
-static bool uiTextBox(Rectangle r, char* buf, int cap, bool valid) {
+// text box with clipboard paste (cmd or ctrl V), returns true when the value is committed.
+// digitsOnly restricts typing to digits and commas, used by the hidden layers box.
+static int gFocusId = -1;
+static bool uiTextBox(Rectangle r, std::string& text, int id, bool valid, bool digitsOnly,
+                      const char* placeholder) {
     Vector2 m = GetMousePosition();
     bool committed = false;
+    bool focused = gFocusId == id;
+    // a clear button sits inside the right edge once there is text
+    Rectangle clearBtn = { r.x + r.width - 18, r.y + 2, 16, r.height - 4 };
+    bool hasText = !text.empty();
+
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        bool inside = CheckCollisionPointRec(m, r);
-        if (inside && !gTextFocus) gTextFocus = true;
-        else if (!inside && gTextFocus) { gTextFocus = false; committed = true; }
+        if (hasText && CheckCollisionPointRec(m, clearBtn)) {
+            text.clear();
+            gFocusId = id;
+            committed = true;
+        } else if (CheckCollisionPointRec(m, r)) {
+            gFocusId = id;
+        } else if (focused) {
+            gFocusId = -1;
+            committed = true;
+        }
+        focused = gFocusId == id;
     }
-    if (gTextFocus) {
-        int c;
-        while ((c = GetCharPressed()) > 0) {
-            int len = (int)strlen(buf);
-            if (len < cap - 1 && ((c >= '0' && c <= '9') || c == ',')) {
-                buf[len] = (char)c;
-                buf[len + 1] = 0;
+
+    if (focused) {
+        bool cmdDown = IsKeyDown(KEY_LEFT_SUPER) || IsKeyDown(KEY_RIGHT_SUPER) ||
+                       IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+        if (cmdDown && IsKeyPressed(KEY_V)) {
+            const char* clip = GetClipboardText();
+            if (clip) {
+                for (const char* p = clip; *p; p++) {
+                    if (*p == '\n' || *p == '\r') continue;
+                    if (digitsOnly && !((*p >= '0' && *p <= '9') || *p == ',')) continue;
+                    text += *p;
+                }
+                committed = true;
             }
         }
-        if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
-            int len = (int)strlen(buf);
-            if (len > 0) buf[len - 1] = 0;
+        int c;
+        while ((c = GetCharPressed()) > 0) {
+            if (cmdDown) continue; // ignore the v from cmd V
+            if (digitsOnly && !((c >= '0' && c <= '9') || c == ',')) continue;
+            if (c >= 32 && c < 127) text += (char)c;
         }
-        if (IsKeyPressed(KEY_ENTER)) { gTextFocus = false; committed = true; }
+        if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
+            if (cmdDown) text.clear();
+            else if (!text.empty()) text.pop_back();
+        }
+        if (IsKeyPressed(KEY_ENTER)) { gFocusId = -1; committed = true; }
     }
+
     DrawRectangleRec(r, WHITE);
-    Color border = !valid ? RED : gTextFocus ? kAccent : Color{ 200, 200, 200, 255 };
-    DrawRectangleLinesEx(r, gTextFocus ? 2.0f : 1.0f, border);
-    char shown[80];
-    snprintf(shown, sizeof(shown), "%s%s", buf, gTextFocus && ((int)(GetTime() * 2) % 2) ? "_" : "");
-    DrawText(shown, (int)(r.x + 5), (int)(r.y + r.height / 2 - 6), 12, BLACK);
+    Color border = !valid ? RED : focused ? kAccent : Color{ 200, 200, 200, 255 };
+    DrawRectangleLinesEx(r, focused ? 2.0f : 1.0f, border);
+
+    // long values (seeds) show a head plus a length count instead of the whole string
+    hasText = !text.empty();
+    float textRoom = r.width - 12 - (hasText ? 18 : 0);
+    std::string shown;
+    if (!hasText) {
+        shown = placeholder ? placeholder : "";
+    } else if (MeasureText(text.c_str(), 12) <= textRoom) {
+        shown = text;
+    } else {
+        char tail[32];
+        snprintf(tail, sizeof(tail), "... (%d chars)", (int)text.size());
+        int tailW = MeasureText(tail, 12);
+        shown = text;
+        while (!shown.empty() && MeasureText(shown.c_str(), 12) + tailW > textRoom) {
+            shown.pop_back();
+        }
+        shown += tail;
+    }
+    if (focused && hasText && (int)(GetTime() * 2) % 2) shown += "_";
+    DrawText(shown.c_str(), (int)(r.x + 5), (int)(r.y + r.height / 2 - 6), 12,
+             hasText ? BLACK : Color{ 170, 170, 170, 255 });
+
+    if (hasText) {
+        DrawText("x", (int)(clearBtn.x + 5), (int)(clearBtn.y + clearBtn.height / 2 - 6), 12, GRAY);
+    }
     return committed;
 }
 
@@ -637,11 +689,11 @@ static double errorLine(double x) { return predictLine(x) - testLine(x); }
 //////////////////// seed buttons ////////////////////
 
 static void syncHiddenText() {
-    gHiddenText[0] = 0;
+    gHiddenText.clear();
     for (size_t i = 0; i < gHidden.size(); i++) {
         char buf[16];
         snprintf(buf, sizeof(buf), i ? ",%d" : "%d", gHidden[i]);
-        strncat(gHiddenText, buf, sizeof(gHiddenText) - strlen(gHiddenText) - 1);
+        gHiddenText += buf;
     }
     gHiddenValid = true;
 }
@@ -652,26 +704,28 @@ static void copySeed() {
         if (gXgb.trees.empty()) { showStatus("Train at least one tree before copying a seed"); return; }
         seed = gXgb.toSeed();
     } else {
+        // re-measure first, new networks carry a stale error of 0 and would sort to the front
+        for (auto& nn : gPop.nets) gPop.measure(nn);
         gPop.sortByError();
         seed = gPop.nets[0].toSeed();
     }
     SetClipboardText(seed.c_str());
+    gSeedBox = seed;
     FILE* f = fopen("seed.txt", "w");
     if (f) { fputs(seed.c_str(), f); fclose(f); }
-    showStatus(TextFormat("Seed copied to clipboard and seed.txt (%d chars)", (int)seed.size()));
+    showStatus(TextFormat("Copied %d chars to clipboard + seed.txt", (int)seed.size()));
 }
 
-// loads an NNSEED1 or XGBSEED1 seed, switching training method to match
+// loads the NNSEED1 or XGBSEED1 seed sitting in the seed box, switching training method to match
 static void loadSeed() {
-    const char* clip = GetClipboardText();
-    if (!clip || !*clip) { showStatus("Clipboard is empty"); return; }
-    std::string s = clip;
+    std::string s = gSeedBox;
     while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ')) s.pop_back();
     while (!s.empty() && (s.front() == '\n' || s.front() == '\r' || s.front() == ' ')) s.erase(s.begin());
+    if (s.empty()) { showStatus("Paste a seed into the box first (cmd V)"); return; }
 
     if (s.rfind("XGBSEED1", 0) == 0) {
         XGBoostEnsemble ens;
-        if (!XGBoostEnsemble::fromSeed(s, ens)) { showStatus("Invalid XGBoost seed in clipboard"); return; }
+        if (!XGBoostEnsemble::fromSeed(s, ens)) { showStatus("Invalid XGBoost seed"); return; }
         if (ens.inputSize != gInputSize || ens.outputSize != gOutputSize) {
             showStatus(TextFormat("Seed is %din %dout, switch network format first",
                                   ens.inputSize, ens.outputSize));
@@ -689,7 +743,7 @@ static void loadSeed() {
     }
 
     NeuralNetwork nn;
-    if (!NeuralNetwork::fromSeed(s, nn)) { showStatus("Invalid seed in clipboard"); return; }
+    if (!NeuralNetwork::fromSeed(s, nn)) { showStatus("Invalid seed"); return; }
     if (nn.inputSize() != gInputSize || nn.outputSize() != gOutputSize) {
         showStatus(TextFormat("Seed is %din %dout, switch network format first",
                               nn.inputSize(), nn.outputSize()));
@@ -712,7 +766,7 @@ static void loadSeed() {
 
 int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
-    InitWindow(1280, 760, "Machine Learning Visualizer");
+    InitWindow(1280, 800, "Machine Learning Visualizer");
     SetTargetFPS(60);
 
     rebuildPopulation();
@@ -895,10 +949,10 @@ int main() {
                 y += 30;
             }
             DrawText("Hidden Layers (nodes per layer)", 15, (int)y, 10, GRAY); y += 13;
-            if (uiTextBox({ 15, y, cw, 22 }, gHiddenText, sizeof(gHiddenText), gHiddenValid)) {
+            if (uiTextBox({ 15, y, cw, 22 }, gHiddenText, 10, gHiddenValid, true, "7,10,7")) {
                 // parse the csv into hidden layer sizes
                 std::vector<int> parsed;
-                const char* p = gHiddenText;
+                const char* p = gHiddenText.c_str();
                 char* end;
                 bool ok = *p != 0;
                 while (*p) {
@@ -941,7 +995,11 @@ int main() {
         y += 36;
         if (uiButton({ 15, y, cw / 2 - 4, 28 }, "Copy Seed")) copySeed();
         if (uiButton({ 15 + cw / 2 + 4, y, cw / 2 - 4, 28 }, "Load Seed")) loadSeed();
-        y += 36;
+        y += 32;
+
+        DrawText("Seed (click, then cmd V to paste)", 15, (int)y, 10, GRAY); y += 13;
+        uiTextBox({ 15, y, cw, 22 }, gSeedBox, 11, true, false, "paste a seed here");
+        y += 28;
 
         if (GetTime() < gStatusUntil) {
             DrawText(gStatusMsg.c_str(), 15, (int)y, 10, DARKGRAY);

@@ -33,6 +33,7 @@ window.onload = function() {
     document.querySelectorAll('input[type="checkbox"]').forEach(el => {
         (el as HTMLInputElement).checked = (el as HTMLInputElement).defaultChecked;
     });
+    document.querySelectorAll('textarea').forEach(el => { el.value = ''; });
     start();
     resizeCanvas();
     setInterval(()=>{
@@ -1289,39 +1290,54 @@ function xgbResolutionChange() {
 }
 (window as any).xgbResolutionChange = xgbResolutionChange;
 
-// Copy the current model as a seed string to the clipboard
+// Show a short message next to the seed box
+function seedStatus(msg: string, isError: boolean){
+    const el = document.getElementById('seedStatus') as HTMLSpanElement;
+    el.textContent = msg ? '- ' + msg : '';
+    el.style.color = isError ? '#E53935' : '#4CAF50';
+}
+
+// Copy the current model as a seed string to the clipboard and the seed box
 // Neural network methods make an NNSEED1, XGBoost makes an XGBSEED1
 function copySeed(){
     let seed: string;
     if (trainingMethod === 'XGBoost') {
         if (!xgboost || xgboost.trees.length === 0) {
-            alert('Train at least one tree before copying a seed.');
+            seedStatus('train at least one tree first', true);
             return;
         }
         seed = xgboost.toSeed();
     } else if (nnl instanceof NeuralNetworkList) {
+        // re-measure first, new networks carry a stale error of 0 and would sort to the front
+        nnl.resetError();
+        nnl.testErrorTrials(nnl.trialInputsList, nnl.trialOutputsList, nnl.trialPower);
         nnl.sort();
         seed = nnl.neuralNetworks[0].toSeed();
     } else {
         return;
     }
+    (document.getElementById('seedBox') as HTMLTextAreaElement).value = seed;
     navigator.clipboard.writeText(seed).then(() => {
-        alert('Seed copied to clipboard (' + seed.length + ' chars).');
+        seedStatus(`copied ${seed.length} chars`, false);
     }).catch(() => {
-        prompt('Copy the seed below:', seed);
+        // clipboard can be blocked, the seed is in the box either way
+        seedStatus(`${seed.length} chars, copy from the box`, false);
     });
 }
 (window as any).copySeed = copySeed;
 
-// Load a seed string, switching training method to match the seed type
+// Load the seed pasted in the seed box, switching training method to match
 function loadSeed(){
-    const seed = prompt('Paste seed:');
-    if (!seed) return;
+    const seed = (document.getElementById('seedBox') as HTMLTextAreaElement).value.trim();
+    if (!seed) {
+        seedStatus('paste a seed into the box first', true);
+        return;
+    }
     try {
-        if (seed.trim().startsWith('XGBSEED1')) {
+        if (seed.startsWith('XGBSEED1')) {
             const ens = XGBoostEnsemble.fromSeed(seed);
             if (ens.inputSize !== inputSize || ens.outputSize !== outputSize) {
-                alert(`Seed is ${ens.inputSize} in ${ens.outputSize} out, but current format is ${inputSize} in ${outputSize} out. Switch the network format first.`);
+                seedStatus(`seed is ${ens.inputSize}in ${ens.outputSize}out, switch network format`, true);
                 return;
             }
             if (trainingMethod !== 'XGBoost') {
@@ -1335,11 +1351,12 @@ function loadSeed(){
             (document.getElementById('shrinkage') as HTMLInputElement).value = ens.shrinkage.toString();
             (document.getElementById('shrinkageSlider') as HTMLInputElement).value = ens.shrinkage.toString();
             (document.getElementById('shrinkageDisplay') as HTMLSpanElement).textContent = ens.shrinkage.toFixed(2);
+            seedStatus(`loaded ${ens.trees.length} trees`, false);
             return;
         }
         const nn = NeuralNetwork.fromSeed(seed);
         if (nn.inputSize !== inputSize || nn.outputSize !== outputSize) {
-            alert(`Seed is ${nn.inputSize} in ${nn.outputSize} out, but current format is ${inputSize} in ${outputSize} out. Switch the network format first.`);
+            seedStatus(`seed is ${nn.inputSize}in ${nn.outputSize}out, switch network format`, true);
             return;
         }
         if (trainingMethod === 'XGBoost') {
@@ -1358,8 +1375,10 @@ function loadSeed(){
         }
         nnl.resetBackpropWorker();
         createTrials();
+        seedStatus(`loaded ${hiddenLayerSizes.join(',')} network`, false);
     } catch (e) {
-        alert('Could not load seed: ' + e);
+        seedStatus('invalid seed', true);
+        console.error(e);
     }
 }
 (window as any).loadSeed = loadSeed;
