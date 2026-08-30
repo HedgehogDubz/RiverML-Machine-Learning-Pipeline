@@ -3,6 +3,7 @@
 // sidebar with controls on the left.
 #include "raylib.h"
 #include "neuralnetwork.h"
+#include "xgboost.h"
 
 #include <cmath>
 #include <cstdio>
@@ -15,13 +16,17 @@
 enum class NetFormat { Val1in1Out, Val2in1Out, Cat2in2Out };
 enum class DataFormat { TestVsOutput, Output, Error, Test, None };
 enum class NetView { Best, All };
-enum class TrainMethod { Genetic, Backprop };
+enum class TrainMethod { Genetic, Backprop, XGBoost };
 
 static const char* kFormatNames[] = { "Value: 1in1out", "Value: 2in1out", "Cat: 2in2out" };
 static const char* kDataNames2In[] = { "Output", "Error", "Test", "None" };
 static const char* kDataNames1In[] = { "Test vs Output", "Output", "Error", "Test", "None" };
 static const char* kViewNames[] = { "Best", "All" };
-static const char* kMethodNames[] = { "Genetic", "Backprop" };
+static const char* kMethodNames[] = { "Genetic", "Backprop", "XGBoost" };
+static const char* kTreeViewNames[] = { "Base Tree", "Latest Tree", "All Trees" };
+static const char* kActNames[] = { "ReLU", "Tanh" }; // UI choices, the engine still runs sigmoid seeds
+static const char* kResNames[] = { "0.1", "0.05", "0.02", "0.01" };
+static const double kResVals[] = { 0.1, 0.05, 0.02, 0.01 };
 
 static const char* kTest1Names[] = { "Sine", "Square", "Sawtooth", "Triangle", "Abs", "Cubic",
                                      "Polynomial", "Step", "Gaussian", "Tanh", "Sinc", "Noisy Sine" };
@@ -52,6 +57,22 @@ static Population gPop;
 static int gInputSize = 2;
 static int gOutputSize = 1;
 static std::vector<int> gHidden = { 7, 10, 20, 20, 10, 7 };
+static Activation gAct = Activation::ReLU;
+static Activation gOutAct = Activation::Tanh;
+static char gHiddenText[64] = "7,10,20,20,10,7";
+static bool gHiddenValid = true;
+
+// XGBoost state
+static XGBoostEnsemble gXgb;
+static float gShrinkage = 0.1f;
+static float gXgbMaxDepth = 4;
+static bool gLimitTrees = false;
+static float gMaxTrees = 20;
+static int gXgbResIdx = 2;
+static std::vector<std::vector<double>> gXgbInputs;
+static std::vector<std::vector<double>> gXgbOutputs;
+static int gTreeViewIdx = 0;
+static float gTopScroll = 0;
 
 static std::string gStatusMsg;
 static double gStatusUntil = 0;
@@ -153,14 +174,30 @@ static void createTrials() {
     }
     for (auto& in : gPop.trialInputs) gPop.trialOutputs.push_back(testVec(in));
     for (auto& in : gPop.testInputs) gPop.testOutputs.push_back(testVec(in));
+
+    // XGBoost training grid at the chosen resolution, plus a fresh ensemble
+    gXgbInputs.clear();
+    gXgbOutputs.clear();
+    double res = kResVals[gXgbResIdx];
+    int steps = (int)round(2.0 / res);
+    if (gInputSize == 1) {
+        for (int i = 0; i <= steps; i++) gXgbInputs.push_back({ -1.0 + i * res });
+    } else {
+        for (int i = 0; i <= steps; i++)
+            for (int j = 0; j <= steps; j++)
+                gXgbInputs.push_back({ -1.0 + i * res, -1.0 + j * res });
+    }
+    for (auto& in : gXgbInputs) gXgbOutputs.push_back(testVec(in));
+    gXgb.reset(gInputSize, gOutputSize);
+    gTopScroll = 0;
 }
 
 static void rebuildPopulation() {
     gInputSize = gFormat == NetFormat::Val1in1Out ? 1 : 2;
     gOutputSize = gFormat == NetFormat::Cat2in2Out ? 2 : 1;
-    Activation outAct = gFormat == NetFormat::Cat2in2Out ? Activation::Sigmoid : Activation::Tanh;
     int count = gMethod == TrainMethod::Genetic ? 16 : 1;
-    gPop.init(count, gInputSize, gHidden, gOutputSize, Activation::ReLU, outAct);
+    if (gMethod == TrainMethod::XGBoost) count = 1;
+    gPop.init(count, gInputSize, gHidden, gOutputSize, gAct, gOutAct);
     createTrials();
     gWeightStrength = 0.01;
     gBiasStrength = 0.01;
@@ -246,6 +283,55 @@ static float uiSlider(Rectangle r, float minV, float maxV, float value, int id) 
     return value;
 }
 
+// text box for digits and commas, returns true when the value is committed
+static bool gTextFocus = false;
+static bool uiTextBox(Rectangle r, char* buf, int cap, bool valid) {
+    Vector2 m = GetMousePosition();
+    bool committed = false;
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        bool inside = CheckCollisionPointRec(m, r);
+        if (inside && !gTextFocus) gTextFocus = true;
+        else if (!inside && gTextFocus) { gTextFocus = false; committed = true; }
+    }
+    if (gTextFocus) {
+        int c;
+        while ((c = GetCharPressed()) > 0) {
+            int len = (int)strlen(buf);
+            if (len < cap - 1 && ((c >= '0' && c <= '9') || c == ',')) {
+                buf[len] = (char)c;
+                buf[len + 1] = 0;
+            }
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
+            int len = (int)strlen(buf);
+            if (len > 0) buf[len - 1] = 0;
+        }
+        if (IsKeyPressed(KEY_ENTER)) { gTextFocus = false; committed = true; }
+    }
+    DrawRectangleRec(r, WHITE);
+    Color border = !valid ? RED : gTextFocus ? kAccent : Color{ 200, 200, 200, 255 };
+    DrawRectangleLinesEx(r, gTextFocus ? 2.0f : 1.0f, border);
+    char shown[80];
+    snprintf(shown, sizeof(shown), "%s%s", buf, gTextFocus && ((int)(GetTime() * 2) % 2) ? "_" : "");
+    DrawText(shown, (int)(r.x + 5), (int)(r.y + r.height / 2 - 6), 12, BLACK);
+    return committed;
+}
+
+static bool uiCheckbox(Rectangle r, const char* label, bool* value) {
+    bool changed = false;
+    Rectangle hit = { r.x, r.y, r.width, r.height };
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(), hit)) {
+        *value = !*value;
+        changed = true;
+    }
+    Rectangle box = { r.x, r.y + r.height / 2 - 7, 14, 14 };
+    DrawRectangleRec(box, WHITE);
+    DrawRectangleLinesEx(box, 1, Color{ 160, 160, 160, 255 });
+    if (*value) DrawRectangle((int)box.x + 3, (int)box.y + 3, 8, 8, kAccent);
+    DrawText(label, (int)(box.x + 20), (int)(r.y + r.height / 2 - 6), 12, DARKGRAY);
+    return changed;
+}
+
 //////////////////// network drawing ////////////////////
 
 static void drawValueText(double v, int cx, int cy, double maxWidth) {
@@ -308,6 +394,127 @@ static void drawNetwork(NeuralNetwork& nn, Rectangle rect, bool showError) {
         snprintf(buf, sizeof(buf), "u MAE: %.5f", nn.meanError);
         w = MeasureText(buf, 10);
         DrawText(buf, (int)(rect.x + rect.width / 2 - w / 2), (int)(rect.y + rect.height - 13), 10, BLACK);
+    }
+}
+
+//////////////////// tree drawing ////////////////////
+
+static const Color kRedHi = { 229, 57, 53, 255 };
+
+static bool onTreePath(const std::vector<int>& path, int ni) {
+    for (int p : path) if (p == ni) return true;
+    return false;
+}
+
+static void drawTreeNode(const DecisionTree& t, int ni, float x, float y, float width,
+                         const std::vector<int>& path, Rectangle bounds) {
+    const TreeNode& n = t.nodes[ni];
+    bool onPath = onTreePath(path, ni);
+    float r = onPath ? 6.0f : 5.0f;
+    float gap = 25;
+    char buf[64];
+
+    // keep the label inside the cell horizontally
+    auto clampTextX = [&](float tx, int tw) {
+        float minX = bounds.x + tw / 2.0f + 2;
+        float maxX = bounds.x + bounds.width - tw / 2.0f - 2;
+        return fmaxf(minX, fminf(maxX, tx));
+    };
+
+    if (n.isLeaf()) {
+        DrawCircleV({ x, y }, r, onPath ? kRedHi : Color{ 76, 175, 80, 255 });
+        if (t.outputSize > 1) {
+            int maxIdx = 0;
+            for (int k = 1; k < t.outputSize; k++) if (n.value[k] > n.value[maxIdx]) maxIdx = k;
+            snprintf(buf, sizeof(buf), "%d", maxIdx + 1);
+        } else {
+            snprintf(buf, sizeof(buf), "%.2f", n.value[0]);
+        }
+        int fs = 10;
+        int tw = MeasureText(buf, fs);
+        DrawText(buf, (int)(clampTextX(x, tw) - tw / 2), (int)(y + r + 3), fs, onPath ? kRedHi : BLACK);
+        return;
+    }
+
+    DrawCircleV({ x, y }, r, onPath ? kRedHi : Color{ 33, 150, 243, 255 });
+    snprintf(buf, sizeof(buf), "%s<%.1f", n.feature == 0 ? "x" : "y", n.threshold);
+    int fs = 10;
+    int tw = MeasureText(buf, fs);
+    DrawText(buf, (int)(clampTextX(x, tw) - tw / 2), (int)(y - r - 11), fs, onPath ? kRedHi : BLACK);
+
+    if (n.left >= 0 && n.right >= 0) {
+        float leftX = x - width / 4, rightX = x + width / 4, childY = y + gap;
+        bool lOn = onTreePath(path, n.left);
+        bool rOn = onTreePath(path, n.right);
+        DrawLineEx({ x, y + r }, { leftX, childY - (lOn ? 6.0f : 5.0f) }, lOn ? 2.5f : 1.0f,
+                   lOn ? kRedHi : Color{ 102, 102, 102, 255 });
+        DrawLineEx({ x, y + r }, { rightX, childY - (rOn ? 6.0f : 5.0f) }, rOn ? 2.5f : 1.0f,
+                   rOn ? kRedHi : Color{ 102, 102, 102, 255 });
+        drawTreeNode(t, n.left, leftX, childY, width / 2, path, bounds);
+        drawTreeNode(t, n.right, rightX, childY, width / 2, path, bounds);
+    }
+}
+
+static void drawTree(const DecisionTree& t, Rectangle rect, const std::vector<int>& path) {
+    drawTreeNode(t, 0, rect.x + rect.width / 2, rect.y + 15, rect.width * 0.8f, path, rect);
+}
+
+static void drawSingleTree(Rectangle rect, int treeIndex, const std::vector<double>& input) {
+    if (treeIndex < 0 || treeIndex >= (int)gXgb.trees.size()) return;
+    const DecisionTree& tree = gXgb.trees[treeIndex];
+    char buf[96];
+    snprintf(buf, sizeof(buf), "Tree %d%s", treeIndex, treeIndex == 0 ? " (base)" : "");
+    DrawText(buf, (int)rect.x + 5, (int)rect.y + 4, 11, BLACK);
+
+    std::vector<int> path = tree.getPath(input);
+    drawTree(tree, { rect.x, rect.y + 15, rect.width, rect.height - 15 }, path);
+
+    std::vector<double> pred = gXgb.predict(input);
+    std::string predStr = "Prediction: ";
+    for (size_t i = 0; i < pred.size(); i++) {
+        snprintf(buf, sizeof(buf), i ? ", %.3f" : "%.3f", pred[i]);
+        predStr += buf;
+    }
+    int tw = MeasureText(predStr.c_str(), 12);
+    DrawText(predStr.c_str(), (int)(rect.x + rect.width - tw - 5), (int)rect.y + 4, 12, kRedHi);
+}
+
+// all trees in a scrollable grid
+static void drawAllTrees(Rectangle rect, const std::vector<double>& input) {
+    int n = (int)gXgb.trees.size();
+    if (n == 0) return;
+    int cols = n < 4 ? n : 4;
+    int rows = (n + cols - 1) / cols;
+    float cellW = rect.width / cols;
+    float minCellH = 200;
+    float cellH = fmaxf(minCellH, rect.height / rows);
+    float contentH = rows * cellH;
+    float maxScroll = fmaxf(0.0f, contentH - rect.height);
+
+    if (CheckCollisionPointRec(GetMousePosition(), rect)) {
+        gTopScroll -= GetMouseWheelMove() * 30;
+    }
+    gTopScroll = fmaxf(0.0f, fminf(maxScroll, gTopScroll));
+
+    BeginScissorMode((int)rect.x, (int)rect.y, (int)rect.width, (int)rect.height);
+    for (int i = 0; i < n; i++) {
+        float x = rect.x + (i % cols) * cellW;
+        float y = rect.y + (i / cols) * cellH - gTopScroll;
+        if (y + cellH < rect.y || y > rect.y + rect.height) continue;
+        DrawRectangle((int)x + 2, (int)y + 2, (int)cellW - 4, (int)cellH - 4,
+                      i == 0 ? Color{ 240, 240, 255, 255 } : Color{ 248, 248, 248, 255 });
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Tree %d%s", i, i == 0 ? " (base)" : "");
+        DrawText(buf, (int)x + 5, (int)y + 5, 10, BLACK);
+        std::vector<int> path = gXgb.trees[i].getPath(input);
+        drawTree(gXgb.trees[i], { x + 5, y + 18, cellW - 10, cellH - 23 }, path);
+    }
+    EndScissorMode();
+
+    if (maxScroll > 0) {
+        float barH = fmaxf(20.0f, rect.height * rect.height / contentH);
+        float barY = rect.y + (gTopScroll / maxScroll) * (rect.height - barH);
+        DrawRectangle((int)(rect.x + rect.width - 6), (int)barY, 4, (int)barH, Color{ 0, 0, 0, 80 });
     }
 }
 
@@ -409,10 +616,16 @@ static void drawLineGraph(Rectangle rect, std::vector<std::pair<double (*)(doubl
     }
 }
 
+// current model prediction, neural network or XGBoost
+static std::vector<double> predictModel(const std::vector<double>& in) {
+    if (gMethod == TrainMethod::XGBoost) return gXgb.predict(in);
+    return gPop.nets[0].run(in);
+}
+
 // helper for line graph function pointers
 static double predictLine(double x) {
     std::vector<double> in = { x };
-    return gPop.nets[0].run(in)[0];
+    return predictModel(in)[0];
 }
 static double testLine(double x) {
     double in[2] = { x, 0 }, out[2];
@@ -423,27 +636,75 @@ static double errorLine(double x) { return predictLine(x) - testLine(x); }
 
 //////////////////// seed buttons ////////////////////
 
+static void syncHiddenText() {
+    gHiddenText[0] = 0;
+    for (size_t i = 0; i < gHidden.size(); i++) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), i ? ",%d" : "%d", gHidden[i]);
+        strncat(gHiddenText, buf, sizeof(gHiddenText) - strlen(gHiddenText) - 1);
+    }
+    gHiddenValid = true;
+}
+
 static void copySeed() {
-    gPop.sortByError();
-    std::string seed = gPop.nets[0].toSeed();
+    std::string seed;
+    if (gMethod == TrainMethod::XGBoost) {
+        if (gXgb.trees.empty()) { showStatus("Train at least one tree before copying a seed"); return; }
+        seed = gXgb.toSeed();
+    } else {
+        gPop.sortByError();
+        seed = gPop.nets[0].toSeed();
+    }
     SetClipboardText(seed.c_str());
     FILE* f = fopen("seed.txt", "w");
     if (f) { fputs(seed.c_str(), f); fclose(f); }
     showStatus(TextFormat("Seed copied to clipboard and seed.txt (%d chars)", (int)seed.size()));
 }
 
+// loads an NNSEED1 or XGBSEED1 seed, switching training method to match
 static void loadSeed() {
     const char* clip = GetClipboardText();
     if (!clip || !*clip) { showStatus("Clipboard is empty"); return; }
+    std::string s = clip;
+    while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ')) s.pop_back();
+    while (!s.empty() && (s.front() == '\n' || s.front() == '\r' || s.front() == ' ')) s.erase(s.begin());
+
+    if (s.rfind("XGBSEED1", 0) == 0) {
+        XGBoostEnsemble ens;
+        if (!XGBoostEnsemble::fromSeed(s, ens)) { showStatus("Invalid XGBoost seed in clipboard"); return; }
+        if (ens.inputSize != gInputSize || ens.outputSize != gOutputSize) {
+            showStatus(TextFormat("Seed is %din %dout, switch network format first",
+                                  ens.inputSize, ens.outputSize));
+            return;
+        }
+        gMethod = TrainMethod::XGBoost;
+        gShrinkage = (float)ens.shrinkage;
+        ens.maxDepth = (int)gXgbMaxDepth;
+        ens.maxTrees = gLimitTrees ? (int)gMaxTrees : INT_MAX;
+        gXgb = std::move(ens);
+        gTreeViewIdx = 0;
+        gTopScroll = 0;
+        showStatus(TextFormat("XGBoost seed loaded, %d trees", (int)gXgb.trees.size()));
+        return;
+    }
+
     NeuralNetwork nn;
-    if (!NeuralNetwork::fromSeed(clip, nn)) { showStatus("Invalid seed in clipboard"); return; }
+    if (!NeuralNetwork::fromSeed(s, nn)) { showStatus("Invalid seed in clipboard"); return; }
     if (nn.inputSize() != gInputSize || nn.outputSize() != gOutputSize) {
         showStatus(TextFormat("Seed is %din %dout, switch network format first",
                               nn.inputSize(), nn.outputSize()));
         return;
     }
+    if (gMethod == TrainMethod::XGBoost) gMethod = TrainMethod::Genetic;
     gHidden.assign(nn.sizes.begin() + 1, nn.sizes.end() - 1);
-    gPop.setAll(nn);
+    gAct = nn.act;
+    gOutAct = nn.outAct;
+    syncHiddenText();
+    int count = gMethod == TrainMethod::Genetic ? 16 : 1;
+    gPop.nets.assign(count, nn);
+    gPop.targetCount = count;
+    gPop.hasWorker = false;
+    gPop.workerBestError = 1e300;
     showStatus("Seed loaded");
 }
 
@@ -460,24 +721,33 @@ int main() {
         // training step
         if (gStarted) {
             int gens = (int)gGensPerDraw;
-            for (int g = 0; g < gens; g++) {
-                double best;
-                if (gMethod == TrainMethod::Genetic) {
-                    best = gPop.runGeneration(gNumWeightsMut, gWeightStrength, gNumBiasesMut, gBiasStrength);
-                    // adapt mutation strength like the web version
-                    if (best == gLastError) {
-                        gWeightStrength = fmax(0.0001, gWeightStrength / 1.001);
-                        gBiasStrength = fmax(0.0001, gBiasStrength / 1.001);
-                    } else {
-                        gWeightStrength = fmin(1.0, gWeightStrength * 1.001);
-                        gBiasStrength = fmin(1.0, gBiasStrength * 1.001);
-                    }
-                } else {
-                    best = gPop.trainBackprop(gLearningRate, gMomentum);
+            if (gMethod == TrainMethod::XGBoost) {
+                gXgb.shrinkage = gShrinkage;
+                gXgb.maxDepth = (int)gXgbMaxDepth;
+                gXgb.maxTrees = gLimitTrees ? (int)gMaxTrees : INT_MAX;
+                for (int g = 0; g < gens; g++) {
+                    gXgb.train(gXgbInputs, gXgbOutputs, gPop.testInputs, gPop.testOutputs);
                 }
-                gLastError = best;
+            } else {
+                for (int g = 0; g < gens; g++) {
+                    double best;
+                    if (gMethod == TrainMethod::Genetic) {
+                        best = gPop.runGeneration(gNumWeightsMut, gWeightStrength, gNumBiasesMut, gBiasStrength);
+                        // adapt mutation strength like the web version
+                        if (best == gLastError) {
+                            gWeightStrength = fmax(0.0001, gWeightStrength / 1.001);
+                            gBiasStrength = fmax(0.0001, gBiasStrength / 1.001);
+                        } else {
+                            gWeightStrength = fmin(1.0, gWeightStrength * 1.001);
+                            gBiasStrength = fmin(1.0, gBiasStrength * 1.001);
+                        }
+                    } else {
+                        best = gPop.trainBackprop(gLearningRate, gMomentum);
+                    }
+                    gLastError = best;
+                }
+                gPop.computeTestErr();
             }
-            gPop.computeTestErr();
         }
 
         BeginDrawing();
@@ -506,6 +776,12 @@ int main() {
                 gTestFnIdx = 0;
                 gDataIdx = 0;
                 gStarted = false;
+                gTreeViewIdx = 0;
+                // reset architecture to the format defaults
+                gAct = Activation::ReLU;
+                gOutAct = Activation::Tanh;
+                gHidden = { 7, 10, 20, 20, 10, 7 };
+                syncHiddenText();
                 rebuildPopulation();
             }
             y += 32;
@@ -528,8 +804,11 @@ int main() {
             y += 32;
         }
 
-        DrawText("Network View", 15, (int)y, 10, GRAY); y += 13;
-        {
+        DrawText(gMethod == TrainMethod::XGBoost ? "Tree View" : "Network View", 15, (int)y, 10, GRAY); y += 13;
+        if (gMethod == TrainMethod::XGBoost) {
+            if (uiCycler({ 15, y, cw, 24 }, kTreeViewNames, 3, &gTreeViewIdx)) gTopScroll = 0;
+            y += 32;
+        } else {
             int idx = (int)gView;
             uiCycler({ 15, y, cw, 24 }, kViewNames, 2, &idx);
             gView = (NetView)idx;
@@ -539,18 +818,24 @@ int main() {
         DrawText("Training Method", 15, (int)y, 10, GRAY); y += 13;
         {
             int idx = (int)gMethod;
-            if (uiCycler({ 15, y, cw, 24 }, kMethodNames, 2, &idx)) {
-                TrainMethod newMethod = (TrainMethod)idx;
-                // keep the best network when switching methods
-                for (auto& nn : gPop.nets) gPop.measure(nn);
-                gPop.sortByError();
-                NeuralNetwork best = gPop.nets[0];
-                gMethod = newMethod;
-                int count = gMethod == TrainMethod::Genetic ? 16 : 1;
-                gPop.nets.assign(count, best);
-                gPop.targetCount = count;
-                gPop.hasWorker = false;
-                gPop.workerBestError = 1e300;
+            if (uiCycler({ 15, y, cw, 24 }, kMethodNames, 3, &idx)) {
+                TrainMethod old = gMethod;
+                gMethod = (TrainMethod)idx;
+                gTopScroll = 0;
+                if (gMethod == TrainMethod::XGBoost) {
+                    gXgb.reset(gInputSize, gOutputSize);
+                    gTreeViewIdx = 0;
+                } else if (old != gMethod) {
+                    // keep the best network when switching between network methods
+                    for (auto& nn : gPop.nets) gPop.measure(nn);
+                    gPop.sortByError();
+                    NeuralNetwork best = gPop.nets[0];
+                    int count = gMethod == TrainMethod::Genetic ? 16 : 1;
+                    gPop.nets.assign(count, best);
+                    gPop.targetCount = count;
+                    gPop.hasWorker = false;
+                    gPop.workerBestError = 1e300;
+                }
             }
             y += 32;
         }
@@ -564,6 +849,73 @@ int main() {
             DrawText(lbl, 15, (int)y, 10, GRAY); y += 13;
             gMomentum = uiSlider({ 15, y, cw, 18 }, 0.0f, 0.99f, gMomentum, 2);
             y += 26;
+        }
+
+        if (gMethod == TrainMethod::XGBoost) {
+            snprintf(lbl, sizeof(lbl), "Shrinkage: %.2f", gShrinkage);
+            DrawText(lbl, 15, (int)y, 10, GRAY); y += 13;
+            gShrinkage = uiSlider({ 15, y, cw, 18 }, 0.01f, 1.0f, gShrinkage, 6);
+            y += 26;
+
+            snprintf(lbl, sizeof(lbl), "Max Depth: %d", (int)gXgbMaxDepth);
+            DrawText(lbl, 15, (int)y, 10, GRAY); y += 13;
+            gXgbMaxDepth = uiSlider({ 15, y, cw, 18 }, 1, 10, gXgbMaxDepth, 7);
+            y += 26;
+
+            snprintf(lbl, sizeof(lbl), "Limit Trees: %s", gLimitTrees ? TextFormat("%d", (int)gMaxTrees) : "off");
+            uiCheckbox({ 15, y, cw, 18 }, lbl, &gLimitTrees);
+            y += 22;
+            if (gLimitTrees) {
+                gMaxTrees = uiSlider({ 15, y, cw, 18 }, 1, 200, gMaxTrees, 8);
+                y += 24;
+            }
+
+            DrawText("Resolution", 15, (int)y, 10, GRAY); y += 13;
+            if (uiCycler({ 15, y, cw, 24 }, kResNames, 4, &gXgbResIdx)) {
+                createTrials(); // rebuild the training grid and reset the ensemble
+            }
+            y += 32;
+        } else {
+            DrawText("Activation", 15, (int)y, 10, GRAY); y += 13;
+            {
+                int idx = gAct == Activation::Tanh ? 1 : 0;
+                if (uiCycler({ 15, y, cw, 24 }, kActNames, 2, &idx)) {
+                    gAct = idx ? Activation::Tanh : Activation::ReLU;
+                    rebuildPopulation();
+                }
+                y += 30;
+            }
+            DrawText("Output Activation", 15, (int)y, 10, GRAY); y += 13;
+            {
+                int idx = gOutAct == Activation::Tanh ? 1 : 0;
+                if (uiCycler({ 15, y, cw, 24 }, kActNames, 2, &idx)) {
+                    gOutAct = idx ? Activation::Tanh : Activation::ReLU;
+                    rebuildPopulation();
+                }
+                y += 30;
+            }
+            DrawText("Hidden Layers (nodes per layer)", 15, (int)y, 10, GRAY); y += 13;
+            if (uiTextBox({ 15, y, cw, 22 }, gHiddenText, sizeof(gHiddenText), gHiddenValid)) {
+                // parse the csv into hidden layer sizes
+                std::vector<int> parsed;
+                const char* p = gHiddenText;
+                char* end;
+                bool ok = *p != 0;
+                while (*p) {
+                    long v = strtol(p, &end, 10);
+                    if (end == p || v < 1 || v > 100 || parsed.size() >= 12) { ok = false; break; }
+                    parsed.push_back((int)v);
+                    if (*end == ',') p = end + 1;
+                    else if (*end == 0) p = end;
+                    else { ok = false; break; }
+                }
+                gHiddenValid = ok && !parsed.empty();
+                if (gHiddenValid) {
+                    gHidden = parsed;
+                    rebuildPopulation();
+                }
+            }
+            y += 30;
         }
 
         snprintf(lbl, sizeof(lbl), "Gens/Draw: %d", (int)gGensPerDraw);
@@ -598,9 +950,16 @@ int main() {
         //////////////////// header ////////////////////
         DrawRectangle((int)canvasX, 0, (int)canvasW, (int)headerH, Color{ 224, 224, 224, 255 });
         char header[256];
-        snprintf(header, sizeof(header),
-                 "Gen: %d | Train RMSE: %.4f MAE: %.4f | Test RMSE: %.4f MAE: %.4f | FPS: %d",
-                 gPop.generation, gPop.trainRMSE, gPop.trainMAE, gPop.testRMSE, gPop.testMAE, GetFPS());
+        if (gMethod == TrainMethod::XGBoost) {
+            snprintf(header, sizeof(header),
+                     "Gen: %d | Trees: %d | Train RMSE: %.4f MAE: %.4f | Test RMSE: %.4f MAE: %.4f | FPS: %d",
+                     gXgb.generation, (int)gXgb.trees.size(), gXgb.trainRMSE, gXgb.trainMAE,
+                     gXgb.testRMSE, gXgb.testMAE, GetFPS());
+        } else {
+            snprintf(header, sizeof(header),
+                     "Gen: %d | Train RMSE: %.4f MAE: %.4f | Test RMSE: %.4f MAE: %.4f | FPS: %d",
+                     gPop.generation, gPop.trainRMSE, gPop.trainMAE, gPop.testRMSE, gPop.testMAE, GetFPS());
+        }
         DrawText(header, (int)canvasX + 5, (int)(headerH / 2 - 6), 12, BLACK);
 
         //////////////////// network view (top half) ////////////////////
@@ -609,7 +968,20 @@ int main() {
             : std::vector<double>{ (double)gInput1, (double)gInput2 };
 
         Rectangle netRect = { canvasX, headerH, canvasW, halfH };
-        if (gView == NetView::Best || gPop.nets.size() == 1) {
+        if (gMethod == TrainMethod::XGBoost) {
+            if (gXgb.trees.empty()) {
+                const char* msg = "Press Start to grow trees";
+                int tw = MeasureText(msg, 16);
+                DrawText(msg, (int)(netRect.x + netRect.width / 2 - tw / 2),
+                         (int)(netRect.y + netRect.height / 2 - 8), 16, GRAY);
+            } else if (gTreeViewIdx == 0) {
+                drawSingleTree(netRect, 0, currentInputs);
+            } else if (gTreeViewIdx == 1) {
+                drawSingleTree(netRect, (int)gXgb.trees.size() - 1, currentInputs);
+            } else {
+                drawAllTrees(netRect, currentInputs);
+            }
+        } else if (gView == NetView::Best || gPop.nets.size() == 1) {
             NeuralNetwork shown = gPop.nets[0];
             shown.run(currentInputs);
             drawNetwork(shown, netRect, false);
@@ -631,7 +1003,6 @@ int main() {
 
         //////////////////// data view (bottom half) ////////////////////
         Rectangle dataRect = { canvasX, headerH + halfH + 2, canvasW, halfH - 2 };
-        NeuralNetwork& net = gPop.nets[0];
 
         if (gFormat == NetFormat::Val1in1Out) {
             Rectangle graph = { dataRect.x + 30, dataRect.y + 8, dataRect.width - 45, dataRect.height - 24 };
@@ -659,7 +1030,7 @@ int main() {
 
             auto predCell = [&](double in1, double in2) {
                 std::vector<double> in = { in1, in2 };
-                return net.run(in);
+                return predictModel(in);
             };
             auto colorForValue = [&](double in1, double in2) -> Color {
                 if (isCat) return lerpColor(kColor1, kColor2, predCell(in1, in2)[0]);

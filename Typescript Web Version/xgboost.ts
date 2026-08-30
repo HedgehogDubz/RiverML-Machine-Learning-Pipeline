@@ -108,6 +108,62 @@ export class XGBoostEnsemble {
         return result;
     }
 
+    // Seed format shared with the C++ version:
+    // XGBSEED1|inputSize,outputSize|shrinkage|tree;tree;...
+    // each tree is preorder csv tokens: d,feature,threshold,... or l,v0,v1,...
+    toSeed(): string {
+        const serNode = (node: TreeNode): string => {
+            if (node.isLeaf()) return 'l,' + node.value!.join(',');
+            return `d,${node.feature},${node.threshold},` + serNode(node.left!) + ',' + serNode(node.right!);
+        };
+        const trees = this.trees.map(t => serNode(t.root)).join(';');
+        return `XGBSEED1|${this.inputSize},${this.outputSize}|${this.shrinkage}|${trees}`;
+    }
+
+    static fromSeed(seed: string): XGBoostEnsemble {
+        const parts = seed.trim().split('|');
+        if (parts.length !== 4 || parts[0] !== 'XGBSEED1') {
+            throw new Error('Invalid seed: expected XGBSEED1|sizes|shrinkage|trees');
+        }
+        const sizes = parts[1].split(',').map(Number);
+        const shrinkage = Number(parts[2]);
+        if (sizes.length !== 2 || sizes.some(isNaN) || isNaN(shrinkage)) {
+            throw new Error('Invalid seed: bad sizes or shrinkage');
+        }
+        const [inputSize, outputSize] = sizes;
+        const ens = new XGBoostEnsemble(inputSize, outputSize, shrinkage, 4, Infinity, outputSize > 1);
+
+        for (const treeStr of parts[3].split(';')) {
+            const tokens = treeStr.split(',');
+            let pos = 0;
+            const parseNode = (): TreeNode => {
+                const node = new TreeNode();
+                const tag = tokens[pos++];
+                if (tag === 'l') {
+                    node.value = [];
+                    for (let i = 0; i < outputSize; i++) node.value.push(Number(tokens[pos++]));
+                    if (node.value.some(isNaN)) throw new Error('Invalid seed: bad leaf value');
+                } else if (tag === 'd') {
+                    node.feature = parseInt(tokens[pos++], 10);
+                    node.threshold = Number(tokens[pos++]);
+                    if (isNaN(node.feature) || isNaN(node.threshold)) throw new Error('Invalid seed: bad split');
+                    node.left = parseNode();
+                    node.right = parseNode();
+                } else {
+                    throw new Error('Invalid seed: unknown node tag');
+                }
+                return node;
+            };
+            const tree = new DecisionTree(inputSize, outputSize);
+            tree.isClassification = outputSize > 1;
+            tree.root = parseNode();
+            if (pos !== tokens.length) throw new Error('Invalid seed: leftover tree tokens');
+            ens.trees.push(tree);
+        }
+        ens.generation = ens.trees.length;
+        return ens;
+    }
+
     static MIN_CELL_HEIGHT = 200;
 
     // Returns the total content height (for scroll calculations)

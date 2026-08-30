@@ -451,11 +451,12 @@
     // Randomize all weights and biases (for creating new networks in XGBoost)
     randomize() {
       for (let l = 1; l < this.numOfLayers; l++) {
+        const scale = Math.min(1, Math.sqrt(6 / this.layers[l - 1].neurons.length));
         for (let n = 0; n < this.layers[l].neurons.length; n++) {
           const neuron = this.layers[l].neurons[n];
-          neuron.bias = Math.random() * 2 - 1;
+          neuron.bias = (Math.random() * 2 - 1) * 0.5;
           for (let w = 0; w < neuron.weights.length; w++) {
-            neuron.weights[w].value = Math.random() * 2 - 1;
+            neuron.weights[w].value = (Math.random() * 2 - 1) * scale;
           }
         }
       }
@@ -659,7 +660,7 @@
       const layerNeurons = [];
       for (let j = 0; j < numOfNeurons; j++) {
         const neuronWeights = this.initWeights();
-        layerNeurons.push(new Neuron(neuronWeights, randomBias ? Math.random() * 2 - 1 : 0, activationFunction2));
+        layerNeurons.push(new Neuron(neuronWeights, randomBias ? (Math.random() * 2 - 1) * 0.5 : 0, activationFunction2));
       }
       this.layers.push(new Layer(layerNeurons));
     }
@@ -669,8 +670,10 @@
       }
       let w = [];
       let lastLayerIndex = this.layers.length - 1;
-      for (let i = 0; i < this.layers[lastLayerIndex].neurons.length; i++) {
-        w.push(new Weight(this.startRandomWeights ? Math.random() * 2 - 1 : 0, new NeuronPosition(lastLayerIndex, i)));
+      const fanIn = this.layers[lastLayerIndex].neurons.length;
+      const scale = Math.min(1, Math.sqrt(6 / fanIn));
+      for (let i = 0; i < fanIn; i++) {
+        w.push(new Weight(this.startRandomWeights ? (Math.random() * 2 - 1) * scale : 0, new NeuronPosition(lastLayerIndex, i)));
       }
       return w;
     }
@@ -1385,6 +1388,64 @@
         }
       }
       return result;
+    }
+    // Seed format shared with the C++ version:
+    // XGBSEED1|inputSize,outputSize|shrinkage|tree;tree;...
+    // each tree is preorder csv tokens: d,feature,threshold,... or l,v0,v1,...
+    toSeed() {
+      const serNode = (node) => {
+        if (node.isLeaf())
+          return "l," + node.value.join(",");
+        return `d,${node.feature},${node.threshold},` + serNode(node.left) + "," + serNode(node.right);
+      };
+      const trees = this.trees.map((t) => serNode(t.root)).join(";");
+      return `XGBSEED1|${this.inputSize},${this.outputSize}|${this.shrinkage}|${trees}`;
+    }
+    static fromSeed(seed) {
+      const parts = seed.trim().split("|");
+      if (parts.length !== 4 || parts[0] !== "XGBSEED1") {
+        throw new Error("Invalid seed: expected XGBSEED1|sizes|shrinkage|trees");
+      }
+      const sizes = parts[1].split(",").map(Number);
+      const shrinkage = Number(parts[2]);
+      if (sizes.length !== 2 || sizes.some(isNaN) || isNaN(shrinkage)) {
+        throw new Error("Invalid seed: bad sizes or shrinkage");
+      }
+      const [inputSize2, outputSize2] = sizes;
+      const ens = new _XGBoostEnsemble(inputSize2, outputSize2, shrinkage, 4, Infinity, outputSize2 > 1);
+      for (const treeStr of parts[3].split(";")) {
+        const tokens = treeStr.split(",");
+        let pos = 0;
+        const parseNode = () => {
+          const node = new TreeNode();
+          const tag = tokens[pos++];
+          if (tag === "l") {
+            node.value = [];
+            for (let i = 0; i < outputSize2; i++)
+              node.value.push(Number(tokens[pos++]));
+            if (node.value.some(isNaN))
+              throw new Error("Invalid seed: bad leaf value");
+          } else if (tag === "d") {
+            node.feature = parseInt(tokens[pos++], 10);
+            node.threshold = Number(tokens[pos++]);
+            if (isNaN(node.feature) || isNaN(node.threshold))
+              throw new Error("Invalid seed: bad split");
+            node.left = parseNode();
+            node.right = parseNode();
+          } else {
+            throw new Error("Invalid seed: unknown node tag");
+          }
+          return node;
+        };
+        const tree = new DecisionTree(inputSize2, outputSize2);
+        tree.isClassification = outputSize2 > 1;
+        tree.root = parseNode();
+        if (pos !== tokens.length)
+          throw new Error("Invalid seed: leftover tree tokens");
+        ens.trees.push(tree);
+      }
+      ens.generation = ens.trees.length;
+      return ens;
     }
     static MIN_CELL_HEIGHT = 200;
     // Returns the total content height (for scroll calculations)
@@ -2359,7 +2420,7 @@
         outputSize = 2;
         hiddenLayerSizes = [7, 10, 20, 20, 10, 7];
         activationFunction = "relu";
-        outputActivationFunction = "sigmoid";
+        outputActivationFunction = "tanh";
         testFunctionDropdown.innerHTML = `
                 <option value="circle">Circle</option>
                 <option value="square">Square</option>
@@ -2381,7 +2442,7 @@
         outputSize = numCategories;
         hiddenLayerSizes = [10, 20, 20, 10];
         activationFunction = "relu";
-        outputActivationFunction = "sigmoid";
+        outputActivationFunction = "tanh";
         testFunctionDropdown.innerHTML = `
                 <option value="sectors">Sectors</option>
                 <option value="rings">Rings</option>
@@ -2395,6 +2456,10 @@
         testFunctionDropdown.value = testFunctionCatNout;
         break;
     }
+    document.getElementById("hiddenLayers").value = hiddenLayerSizes.join(",");
+    document.getElementById("activationFn").value = activationFunction;
+    document.getElementById("outputActivationFn").value = outputActivationFunction;
+    document.getElementById("hiddenLayers").style.borderColor = "";
     document.getElementById("numCategoriesGroup").style.display = networkFormat === "CatNout" ? "" : "none";
     document.getElementById("input2Group").style.display = inputSize >= 2 ? "" : "none";
     const dataFormatDropdown = document.getElementById("showDataFormat");
@@ -2666,14 +2731,19 @@
   }
   window.xgbResolutionChange = xgbResolutionChange;
   function copySeed() {
-    if (!(nnl instanceof NeuralNetworkList))
-      return;
+    let seed;
     if (trainingMethod === "XGBoost") {
-      alert("Seeds only work for neural network training methods (genetic or backprop).");
+      if (!xgboost || xgboost.trees.length === 0) {
+        alert("Train at least one tree before copying a seed.");
+        return;
+      }
+      seed = xgboost.toSeed();
+    } else if (nnl instanceof NeuralNetworkList) {
+      nnl.sort();
+      seed = nnl.neuralNetworks[0].toSeed();
+    } else {
       return;
     }
-    nnl.sort();
-    const seed = nnl.neuralNetworks[0].toSeed();
     navigator.clipboard.writeText(seed).then(() => {
       alert("Seed copied to clipboard (" + seed.length + " chars).");
     }).catch(() => {
@@ -2686,14 +2756,40 @@
     if (!seed)
       return;
     try {
+      if (seed.trim().startsWith("XGBSEED1")) {
+        const ens = XGBoostEnsemble.fromSeed(seed);
+        if (ens.inputSize !== inputSize || ens.outputSize !== outputSize) {
+          alert(`Seed is ${ens.inputSize} in ${ens.outputSize} out, but current format is ${inputSize} in ${outputSize} out. Switch the network format first.`);
+          return;
+        }
+        if (trainingMethod !== "XGBoost") {
+          document.getElementById("trainingMethod").value = "XGBoost";
+          trainingMethodChange();
+        }
+        ens.maxDepth = xgbMaxDepth;
+        ens.maxTrees = xgbMaxTrees;
+        xgboost = ens;
+        xgbShrinkage = ens.shrinkage;
+        document.getElementById("shrinkage").value = ens.shrinkage.toString();
+        document.getElementById("shrinkageSlider").value = ens.shrinkage.toString();
+        document.getElementById("shrinkageDisplay").textContent = ens.shrinkage.toFixed(2);
+        return;
+      }
       const nn = NeuralNetwork.fromSeed(seed);
       if (nn.inputSize !== inputSize || nn.outputSize !== outputSize) {
         alert(`Seed is ${nn.inputSize} in ${nn.outputSize} out, but current format is ${inputSize} in ${outputSize} out. Switch the network format first.`);
         return;
       }
+      if (trainingMethod === "XGBoost") {
+        document.getElementById("trainingMethod").value = "genetic";
+        trainingMethodChange();
+      }
       hiddenLayerSizes = nn.hiddenLayerSizes;
       activationFunction = nn.activationFunction;
       outputActivationFunction = nn.outputActivationFunction;
+      document.getElementById("hiddenLayers").value = hiddenLayerSizes.join(",");
+      document.getElementById("activationFn").value = activationFunction;
+      document.getElementById("outputActivationFn").value = outputActivationFunction;
       nnl = new NeuralNetworkList(numOfNeuralNetworks, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
       for (let i = 0; i < nnl.neuralNetworks.length; i++) {
         nnl.neuralNetworks[i] = nn.clone();
@@ -2705,4 +2801,22 @@
     }
   }
   window.loadSeed = loadSeed;
+  function activationChange() {
+    activationFunction = document.getElementById("activationFn").value;
+    outputActivationFunction = document.getElementById("outputActivationFn").value;
+    reset();
+  }
+  window.activationChange = activationChange;
+  function architectureChange() {
+    const el = document.getElementById("hiddenLayers");
+    const parts = el.value.split(",").map((s) => parseInt(s.trim(), 10));
+    if (parts.length === 0 || parts.length > 12 || parts.some((p) => isNaN(p) || p < 1 || p > 100)) {
+      el.style.borderColor = "red";
+      return;
+    }
+    el.style.borderColor = "";
+    hiddenLayerSizes = parts;
+    reset();
+  }
+  window.architectureChange = architectureChange;
 })();

@@ -948,7 +948,7 @@ function networkChange(){
             outputSize = 2;
             hiddenLayerSizes = [7, 10, 20, 20, 10, 7];
             activationFunction = 'relu';
-            outputActivationFunction = 'sigmoid';
+            outputActivationFunction = 'tanh';
 
             // Add Cat2in2out options
             testFunctionDropdown.innerHTML = `
@@ -972,7 +972,7 @@ function networkChange(){
             outputSize = numCategories;
             hiddenLayerSizes = [10, 20, 20, 10];
             activationFunction = 'relu';
-            outputActivationFunction = 'sigmoid';
+            outputActivationFunction = 'tanh';
 
             testFunctionDropdown.innerHTML = `
                 <option value="sectors">Sectors</option>
@@ -987,6 +987,12 @@ function networkChange(){
             testFunctionDropdown.value = testFunctionCatNout;
             break;
     }
+
+    // Sync architecture controls with the format defaults
+    (document.getElementById('hiddenLayers') as HTMLInputElement).value = hiddenLayerSizes.join(',');
+    (document.getElementById('activationFn') as HTMLSelectElement).value = activationFunction;
+    (document.getElementById('outputActivationFn') as HTMLSelectElement).value = outputActivationFunction;
+    (document.getElementById('hiddenLayers') as HTMLInputElement).style.borderColor = '';
 
     // Show/hide categories slider and input2
     (document.getElementById('numCategoriesGroup') as HTMLDivElement).style.display =
@@ -1283,15 +1289,22 @@ function xgbResolutionChange() {
 }
 (window as any).xgbResolutionChange = xgbResolutionChange;
 
-// Copy the best network as a seed string to the clipboard
+// Copy the current model as a seed string to the clipboard
+// Neural network methods make an NNSEED1, XGBoost makes an XGBSEED1
 function copySeed(){
-    if (!(nnl instanceof NeuralNetworkList)) return;
+    let seed: string;
     if (trainingMethod === 'XGBoost') {
-        alert('Seeds only work for neural network training methods (genetic or backprop).');
+        if (!xgboost || xgboost.trees.length === 0) {
+            alert('Train at least one tree before copying a seed.');
+            return;
+        }
+        seed = xgboost.toSeed();
+    } else if (nnl instanceof NeuralNetworkList) {
+        nnl.sort();
+        seed = nnl.neuralNetworks[0].toSeed();
+    } else {
         return;
     }
-    nnl.sort();
-    const seed = nnl.neuralNetworks[0].toSeed();
     navigator.clipboard.writeText(seed).then(() => {
         alert('Seed copied to clipboard (' + seed.length + ' chars).');
     }).catch(() => {
@@ -1300,19 +1313,45 @@ function copySeed(){
 }
 (window as any).copySeed = copySeed;
 
-// Load a seed string and replace the population with that network
+// Load a seed string, switching training method to match the seed type
 function loadSeed(){
     const seed = prompt('Paste seed:');
     if (!seed) return;
     try {
+        if (seed.trim().startsWith('XGBSEED1')) {
+            const ens = XGBoostEnsemble.fromSeed(seed);
+            if (ens.inputSize !== inputSize || ens.outputSize !== outputSize) {
+                alert(`Seed is ${ens.inputSize} in ${ens.outputSize} out, but current format is ${inputSize} in ${outputSize} out. Switch the network format first.`);
+                return;
+            }
+            if (trainingMethod !== 'XGBoost') {
+                (document.getElementById('trainingMethod') as HTMLSelectElement).value = 'XGBoost';
+                trainingMethodChange();
+            }
+            ens.maxDepth = xgbMaxDepth;
+            ens.maxTrees = xgbMaxTrees;
+            xgboost = ens;
+            xgbShrinkage = ens.shrinkage;
+            (document.getElementById('shrinkage') as HTMLInputElement).value = ens.shrinkage.toString();
+            (document.getElementById('shrinkageSlider') as HTMLInputElement).value = ens.shrinkage.toString();
+            (document.getElementById('shrinkageDisplay') as HTMLSpanElement).textContent = ens.shrinkage.toFixed(2);
+            return;
+        }
         const nn = NeuralNetwork.fromSeed(seed);
         if (nn.inputSize !== inputSize || nn.outputSize !== outputSize) {
             alert(`Seed is ${nn.inputSize} in ${nn.outputSize} out, but current format is ${inputSize} in ${outputSize} out. Switch the network format first.`);
             return;
         }
+        if (trainingMethod === 'XGBoost') {
+            (document.getElementById('trainingMethod') as HTMLSelectElement).value = 'genetic';
+            trainingMethodChange();
+        }
         hiddenLayerSizes = nn.hiddenLayerSizes;
         activationFunction = nn.activationFunction;
         outputActivationFunction = nn.outputActivationFunction;
+        (document.getElementById('hiddenLayers') as HTMLInputElement).value = hiddenLayerSizes.join(',');
+        (document.getElementById('activationFn') as HTMLSelectElement).value = activationFunction;
+        (document.getElementById('outputActivationFn') as HTMLSelectElement).value = outputActivationFunction;
         nnl = new NeuralNetworkList(numOfNeuralNetworks, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
         for (let i = 0; i < nnl.neuralNetworks.length; i++) {
             nnl.neuralNetworks[i] = nn.clone();
@@ -1324,4 +1363,26 @@ function loadSeed(){
     }
 }
 (window as any).loadSeed = loadSeed;
+
+// Rebuild networks with the activation functions picked in the UI
+function activationChange(){
+    activationFunction = (document.getElementById('activationFn') as HTMLSelectElement).value as ActivationFunction;
+    outputActivationFunction = (document.getElementById('outputActivationFn') as HTMLSelectElement).value as ActivationFunction;
+    reset();
+}
+(window as any).activationChange = activationChange;
+
+// Rebuild networks with the hidden layer sizes typed in the UI
+function architectureChange(){
+    const el = document.getElementById('hiddenLayers') as HTMLInputElement;
+    const parts = el.value.split(',').map(s => parseInt(s.trim(), 10));
+    if (parts.length === 0 || parts.length > 12 || parts.some(p => isNaN(p) || p < 1 || p > 100)) {
+        el.style.borderColor = 'red';
+        return;
+    }
+    el.style.borderColor = '';
+    hiddenLayerSizes = parts;
+    reset();
+}
+(window as any).architectureChange = architectureChange;
 ///////////////////////UI AREA////////////////////////////////////

@@ -76,8 +76,10 @@ struct NeuralNetwork {
             if (l == 0) continue;
             L.biases.resize(L.size);
             L.weights.resize((size_t)L.size * L.prevSize);
-            for (auto& b : L.biases) b = randUnit();
-            for (auto& w : L.weights) w = randUnit();
+            // He style scaling keeps deep ReLU nets trainable with backprop
+            double scale = std::min(1.0, std::sqrt(6.0 / L.prevSize));
+            for (auto& b : L.biases) b = randUnit() * 0.5;
+            for (auto& w : L.weights) w = randUnit() * scale;
             L.grads.assign(L.size, 0);
             L.biasVel.assign(L.size, 0);
             L.weightGrads.assign(L.weights.size(), 0);

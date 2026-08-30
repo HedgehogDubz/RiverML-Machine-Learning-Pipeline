@@ -532,12 +532,13 @@ export class NeuralNetwork {
     // Randomize all weights and biases (for creating new networks in XGBoost)
     public randomize(){
         for (let l = 1; l < this.numOfLayers; l++) {
+            const scale = Math.min(1, Math.sqrt(6 / this.layers[l - 1].neurons.length));
             for (let n = 0; n < this.layers[l].neurons.length; n++) {
                 const neuron = this.layers[l].neurons[n];
-                neuron.bias = Math.random() * 2 - 1;
+                neuron.bias = (Math.random() * 2 - 1) * 0.5;
 
                 for (let w = 0; w < neuron.weights.length; w++) {
-                    neuron.weights[w].value = Math.random() * 2 - 1;
+                    neuron.weights[w].value = (Math.random() * 2 - 1) * scale;
                 }
             }
         }
@@ -777,7 +778,7 @@ export class NeuralNetwork {
         for (let j = 0; j < numOfNeurons; j++) {
             const neuronWeights: Weight[] = this.initWeights();
 
-            layerNeurons.push(new Neuron(neuronWeights, (randomBias ? Math.random() * 2 - 1 : 0), activationFunction));
+            layerNeurons.push(new Neuron(neuronWeights, (randomBias ? (Math.random() * 2 - 1) * 0.5 : 0), activationFunction));
         }
         this.layers.push(new Layer(layerNeurons));
     }
@@ -785,8 +786,11 @@ export class NeuralNetwork {
         if (this.layers.length == 0) { return []; }
         let w: Weight[] = [];
         let lastLayerIndex = this.layers.length - 1;
-        for (let i = 0; i < this.layers[lastLayerIndex].neurons.length; i++) {
-            w.push(new Weight((this.startRandomWeights ? Math.random() * 2 - 1 : 0), new NeuronPosition(lastLayerIndex, i)));
+        const fanIn = this.layers[lastLayerIndex].neurons.length;
+        // He style scaling keeps deep ReLU nets trainable with backprop
+        const scale = Math.min(1, Math.sqrt(6 / fanIn));
+        for (let i = 0; i < fanIn; i++) {
+            w.push(new Weight((this.startRandomWeights ? (Math.random() * 2 - 1) * scale : 0), new NeuronPosition(lastLayerIndex, i)));
         }
         return w;
     }

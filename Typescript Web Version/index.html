@@ -80,6 +80,28 @@
                 </select>
             </div>
 
+            <div class="control-row" id="activationGroup">
+                <div class="control-group">
+                    <label>Activation</label>
+                    <select id="activationFn" onchange="activationChange()">
+                        <option value="relu" selected>ReLU</option>
+                        <option value="tanh">Tanh</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Output Act.</label>
+                    <select id="outputActivationFn" onchange="activationChange()">
+                        <option value="tanh" selected>Tanh</option>
+                        <option value="relu">ReLU</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="control-group" id="hiddenLayersGroup">
+                <label>Hidden Layers (nodes per layer)</label>
+                <input type="text" id="hiddenLayers" value="7,10,20,20,10,7" onchange="architectureChange()">
+            </div>
+
             <div id="backpropSettings" style="display: none;">
                 <div class="control-group">
                     <label>Learning Rate: <span id="learningRateDisplay">0.01</span></label>
