@@ -341,19 +341,22 @@ static bool uiTextBox(Rectangle r, std::string& text, int id, bool valid, bool d
     Color border = !valid ? RED : focused ? kAccent : Color{ 200, 200, 200, 255 };
     DrawRectangleLinesEx(r, focused ? 2.0f : 1.0f, border);
 
-    // long values (seeds) show a head plus a length count instead of the whole string
+    // long values (seeds) show a head plus a length count instead of the whole string.
+    // only a few dozen characters can ever fit, so never measure more than a short prefix,
+    // measuring the whole seed every frame would stall the app.
     hasText = !text.empty();
     float textRoom = r.width - 12 - (hasText ? 18 : 0);
+    const size_t maxShown = 128;
     std::string shown;
     if (!hasText) {
         shown = placeholder ? placeholder : "";
-    } else if (MeasureText(text.c_str(), 12) <= textRoom) {
+    } else if (text.size() <= maxShown && MeasureText(text.c_str(), 12) <= textRoom) {
         shown = text;
     } else {
         char tail[32];
         snprintf(tail, sizeof(tail), "... (%d chars)", (int)text.size());
         int tailW = MeasureText(tail, 12);
-        shown = text;
+        shown = text.substr(0, maxShown);
         while (!shown.empty() && MeasureText(shown.c_str(), 12) + tailW > textRoom) {
             shown.pop_back();
         }
