@@ -399,9 +399,9 @@
       this.inputSize = inputSize2;
       this.hiddenLayerSizes = hiddenLayerSizes2;
       this.outputSize = outputSize2;
-      this.initLayers();
       this.activationFunction = activationFunction2;
       this.outputActivationFunction = outputActivationFunction2;
+      this.initLayers();
     }
     run(inputs) {
       if (inputs.length != this.inputSize) {
@@ -605,6 +605,46 @@
             targetNeuron.weights[w].velocity = sourceNeuron.weights[w].velocity;
           }
         }
+      }
+      return nn;
+    }
+    // Seed format shared with the C++ version:
+    // NNSEED1|activation|outputActivation|layerSizes(csv)|params(csv)
+    // params: for each layer after the input, per neuron: bias then weights
+    toSeed() {
+      const sizes = [this.inputSize, ...this.hiddenLayerSizes, this.outputSize];
+      const params = [];
+      for (let l = 1; l < this.numOfLayers; l++) {
+        for (const neuron of this.layers[l].neurons) {
+          params.push(neuron.bias);
+          for (const w of neuron.weights) {
+            params.push(w.value);
+          }
+        }
+      }
+      return `NNSEED1|${this.activationFunction}|${this.outputActivationFunction}|${sizes.join(",")}|${params.join(",")}`;
+    }
+    static fromSeed(seed) {
+      const parts = seed.trim().split("|");
+      if (parts.length !== 5 || parts[0] !== "NNSEED1") {
+        throw new Error("Invalid seed: expected NNSEED1|act|outAct|sizes|params");
+      }
+      const activation = parts[1];
+      const outputActivation = parts[2];
+      const sizes = parts[3].split(",").map(Number);
+      const params = parts[4].split(",").map(Number);
+      const nn = new _NeuralNetwork(sizes[0], sizes.slice(1, -1), sizes[sizes.length - 1], activation, outputActivation);
+      let p = 0;
+      for (let l = 1; l < nn.numOfLayers; l++) {
+        for (const neuron of nn.layers[l].neurons) {
+          neuron.bias = params[p++];
+          for (const w of neuron.weights) {
+            w.value = params[p++];
+          }
+        }
+      }
+      if (p !== params.length || params.some(isNaN)) {
+        throw new Error("Invalid seed: wrong number of parameters");
       }
       return nn;
     }
@@ -1474,7 +1514,7 @@
     }, 1);
   };
   var isStarted = false;
-  var networkFormat = "Val1in1Out";
+  var networkFormat = "Val2in1out";
   var numCategories = 3;
   var showDataFormat = "output";
   var showNetworkFormat = "best";
@@ -2625,4 +2665,44 @@
     }
   }
   window.xgbResolutionChange = xgbResolutionChange;
+  function copySeed() {
+    if (!(nnl instanceof NeuralNetworkList))
+      return;
+    if (trainingMethod === "XGBoost") {
+      alert("Seeds only work for neural network training methods (genetic or backprop).");
+      return;
+    }
+    nnl.sort();
+    const seed = nnl.neuralNetworks[0].toSeed();
+    navigator.clipboard.writeText(seed).then(() => {
+      alert("Seed copied to clipboard (" + seed.length + " chars).");
+    }).catch(() => {
+      prompt("Copy the seed below:", seed);
+    });
+  }
+  window.copySeed = copySeed;
+  function loadSeed() {
+    const seed = prompt("Paste seed:");
+    if (!seed)
+      return;
+    try {
+      const nn = NeuralNetwork.fromSeed(seed);
+      if (nn.inputSize !== inputSize || nn.outputSize !== outputSize) {
+        alert(`Seed is ${nn.inputSize} in ${nn.outputSize} out, but current format is ${inputSize} in ${outputSize} out. Switch the network format first.`);
+        return;
+      }
+      hiddenLayerSizes = nn.hiddenLayerSizes;
+      activationFunction = nn.activationFunction;
+      outputActivationFunction = nn.outputActivationFunction;
+      nnl = new NeuralNetworkList(numOfNeuralNetworks, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
+      for (let i = 0; i < nnl.neuralNetworks.length; i++) {
+        nnl.neuralNetworks[i] = nn.clone();
+      }
+      nnl.resetBackpropWorker();
+      createTrials();
+    } catch (e) {
+      alert("Could not load seed: " + e);
+    }
+  }
+  window.loadSeed = loadSeed;
 })();

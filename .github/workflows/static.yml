@@ -36,8 +36,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: '.'
+          # Upload the web app folder
+          path: 'Typescript Web Version'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

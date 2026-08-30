@@ -1,5 +1,12 @@
 ## Machine Learning Visualizer
 
+Two versions of the same simulator live in this repo:
+
+- `Typescript Web Version/` runs in the browser (this is what gets deployed to GitHub Pages)
+- `CPP Desktop Version/` is a native desktop build using raylib, much faster for training
+
+Both can export a trained model as a seed string (Copy Seed button) and load one back in (Load Seed). Seeds work across both versions. Each folder also has a standalone `neural_network_by_seed` file: one function that takes a seed and inputs and runs the network, no other files needed.
+
 This project started as a simple idea: make machine learning easier to understand by seeing it happen.
 I wanted something lightweight that anyone could run directly in a browser. That’s why this visualizer is built in TypeScript — it keeps everything web-native, easy to run, and accessible without needing extra setup or support.
 

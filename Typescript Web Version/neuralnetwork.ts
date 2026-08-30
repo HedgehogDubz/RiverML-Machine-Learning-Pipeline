@@ -477,9 +477,10 @@ export class NeuralNetwork {
         this.inputSize = inputSize
         this.hiddenLayerSizes = hiddenLayerSizes;
         this.outputSize = outputSize;
-        this.initLayers();
+        // Assign before initLayers so neurons get the right activation
         this.activationFunction = activationFunction;
         this.outputActivationFunction = outputActivationFunction;
+        this.initLayers();
     }
     public run(inputs: number[]) {
         if (inputs.length != this.inputSize) {
@@ -722,6 +723,48 @@ export class NeuralNetwork {
 
         return nn;
     }
+    // Seed format shared with the C++ version:
+    // NNSEED1|activation|outputActivation|layerSizes(csv)|params(csv)
+    // params: for each layer after the input, per neuron: bias then weights
+    public toSeed(): string {
+        const sizes = [this.inputSize, ...this.hiddenLayerSizes, this.outputSize];
+        const params: number[] = [];
+        for (let l = 1; l < this.numOfLayers; l++) {
+            for (const neuron of this.layers[l].neurons) {
+                params.push(neuron.bias);
+                for (const w of neuron.weights) {
+                    params.push(w.value);
+                }
+            }
+        }
+        return `NNSEED1|${this.activationFunction}|${this.outputActivationFunction}|${sizes.join(',')}|${params.join(',')}`;
+    }
+
+    public static fromSeed(seed: string): NeuralNetwork {
+        const parts = seed.trim().split('|');
+        if (parts.length !== 5 || parts[0] !== 'NNSEED1') {
+            throw new Error('Invalid seed: expected NNSEED1|act|outAct|sizes|params');
+        }
+        const activation = parts[1] as ActivationFunction;
+        const outputActivation = parts[2] as ActivationFunction;
+        const sizes = parts[3].split(',').map(Number);
+        const params = parts[4].split(',').map(Number);
+        const nn = new NeuralNetwork(sizes[0], sizes.slice(1, -1), sizes[sizes.length - 1], activation, outputActivation);
+        let p = 0;
+        for (let l = 1; l < nn.numOfLayers; l++) {
+            for (const neuron of nn.layers[l].neurons) {
+                neuron.bias = params[p++];
+                for (const w of neuron.weights) {
+                    w.value = params[p++];
+                }
+            }
+        }
+        if (p !== params.length || params.some(isNaN)) {
+            throw new Error('Invalid seed: wrong number of parameters');
+        }
+        return nn;
+    }
+
     private initLayers(): void {
         this.initNextLayer(this.inputSize, false, this.activationFunction);
         for (let i = 0; i < this.hiddenLayerSizes.length; i++) {

@@ -16,7 +16,7 @@
                 <label>Network Format</label>
                 <select id="networkFormat" onchange="networkChange()">
                     <option value="Val1in1Out"> Value: 1in1out</option>
-                    <option value="Val2in1out">Value: 2in1out</option>
+                    <option value="Val2in1out" selected>Value: 2in1out</option>
                     <option value="Cat2in2out">Cat: 2in2out</option>
                     <option value="CatNout">Cat: N classes</option>
                 </select>
@@ -166,6 +166,11 @@
             <div class="button-row">
                 <button id="startButton" onclick="startToggle()"><span id="startToggleText">Start</span></button>
                 <button id="resetButton" onclick="reset()">Reset</button>
+            </div>
+
+            <div class="button-row">
+                <button id="copySeedButton" onclick="copySeed()">Copy Seed</button>
+                <button id="loadSeedButton" onclick="loadSeed()">Load Seed</button>
             </div>
         </div>
 

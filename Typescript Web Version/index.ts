@@ -42,7 +42,7 @@ window.onload = function() {
 };
 
 let isStarted = false;
-let networkFormat: networkType = 'Val1in1Out';
+let networkFormat: networkType = 'Val2in1out';
 type networkType = 'Val1in1Out' | 'Val2in1out' | 'Cat2in2out' | 'CatNout';
 let numCategories = 3;
 let showDataFormat: ShowDataType = 'output';
@@ -1282,4 +1282,46 @@ function xgbResolutionChange() {
     }
 }
 (window as any).xgbResolutionChange = xgbResolutionChange;
+
+// Copy the best network as a seed string to the clipboard
+function copySeed(){
+    if (!(nnl instanceof NeuralNetworkList)) return;
+    if (trainingMethod === 'XGBoost') {
+        alert('Seeds only work for neural network training methods (genetic or backprop).');
+        return;
+    }
+    nnl.sort();
+    const seed = nnl.neuralNetworks[0].toSeed();
+    navigator.clipboard.writeText(seed).then(() => {
+        alert('Seed copied to clipboard (' + seed.length + ' chars).');
+    }).catch(() => {
+        prompt('Copy the seed below:', seed);
+    });
+}
+(window as any).copySeed = copySeed;
+
+// Load a seed string and replace the population with that network
+function loadSeed(){
+    const seed = prompt('Paste seed:');
+    if (!seed) return;
+    try {
+        const nn = NeuralNetwork.fromSeed(seed);
+        if (nn.inputSize !== inputSize || nn.outputSize !== outputSize) {
+            alert(`Seed is ${nn.inputSize} in ${nn.outputSize} out, but current format is ${inputSize} in ${outputSize} out. Switch the network format first.`);
+            return;
+        }
+        hiddenLayerSizes = nn.hiddenLayerSizes;
+        activationFunction = nn.activationFunction;
+        outputActivationFunction = nn.outputActivationFunction;
+        nnl = new NeuralNetworkList(numOfNeuralNetworks, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
+        for (let i = 0; i < nnl.neuralNetworks.length; i++) {
+            nnl.neuralNetworks[i] = nn.clone();
+        }
+        nnl.resetBackpropWorker();
+        createTrials();
+    } catch (e) {
+        alert('Could not load seed: ' + e);
+    }
+}
+(window as any).loadSeed = loadSeed;
 ///////////////////////UI AREA////////////////////////////////////

@@ -1,5 +1,12 @@
-node_modules/
+Typescript Web Version/node_modules/
 *.js
 *.js.map
-!dist/bundle.js
+!**/dist/bundle.js
+.DS_Store
 
+# C++ build output
+CPP Desktop Version/build/
+CPP Desktop Version/mlvisualizer
+CPP Desktop Version/run_seed
+CPP Desktop Version/*.o
+CPP Desktop Version/seed.txt
