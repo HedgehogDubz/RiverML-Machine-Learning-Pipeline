@@ -316,7 +316,6 @@ private:
     }
 };
 
-// Population that mirrors NeuralNetworkList from the TypeScript version
 struct Population {
     int targetCount = 16;
     std::vector<NeuralNetwork> nets;
