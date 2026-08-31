@@ -25,7 +25,7 @@ make && ./mlvisualizer
 
 Built with C++23. What it gives you:
 
-- Trains far faster than the browser, roughly 600 genetic generations per second on a 441 point grid
+- Trains about 36x faster than the browser build, roughly 570 genetic generations per second against 16
 - Model view on top: the network with bias rings, value fills, and green/red weight lines, or the
   XGBoost decision trees with the live prediction path highlighted in red
 - Data view below: a fine gradient of the model output over the input space, plus an 11x11 grid of
@@ -33,6 +33,10 @@ Built with C++23. What it gives you:
 - Training methods: genetic, backpropagation, and XGBoost
 - Editable architecture: activation functions and a comma list of hidden layer sizes such as `5,8,5`
 - Copy Seed and Load Seed with a seed box, plus a `seed.txt` written next to the binary
+
+Those timings use the default network, `2 -> 7 -> 10 -> 20 -> 20 -> 10 -> 7 -> 1`, which is 77 nodes and
+961 connections. Each generation scores all 16 networks against the training grid: 21 x 21 input points
+spanning -1 to 1 on both axes, so 441 points per network, 6.8 million multiply adds per generation.
 
 Everything lives in three headers: `neuralnetwork.h`, `xgboost.h`, and `decisiontree.h`.
 
