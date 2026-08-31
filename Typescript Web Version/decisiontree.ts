@@ -1,3 +1,6 @@
+// Decision tree used by the XGBoost stage of the RiverML pipeline.
+export namespace RiverML {
+
 // Decision Tree Node
 export class TreeNode {
     feature: number | null = null; // Which input feature to split on (0 or 1)
@@ -286,3 +289,5 @@ export class DecisionTree {
         }
     }
 }
+
+} // namespace RiverML

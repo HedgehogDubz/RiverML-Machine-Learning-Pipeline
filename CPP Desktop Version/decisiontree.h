@@ -1,4 +1,4 @@
-// Decision tree for regression, used by the XGBoost ensemble.
+// Decision tree for regression, used by the XGBoost stage of the RiverML pipeline.
 // Nodes live in a flat vector and reference children by index.
 #pragma once
 
@@ -6,6 +6,8 @@
 #include <cmath>
 #include <numeric>
 #include <vector>
+
+namespace RiverML {
 
 struct TreeNode {
     int feature = -1;
@@ -93,7 +95,7 @@ private:
         std::vector<double> sumL(outputSize);
         for (int f = 0; f < inputSize; f++) {
             for (int k = 0; k < n; k++) order[k] = { X[idx[k]][f], idx[k] };
-            std::sort(order.begin(), order.end());
+            std::ranges::sort(order);
 
             std::fill(sumL.begin(), sumL.end(), 0.0);
             double sqL = 0;
@@ -139,3 +141,5 @@ private:
         return me;
     }
 };
+
+} // namespace RiverML

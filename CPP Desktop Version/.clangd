@@ -1,0 +1,5 @@
+# Tells the editor how this folder is built, otherwise it flags C++23 and raylib as errors
+CompileFlags:
+  Add:
+    - -std=c++23
+    - -I/opt/homebrew/include

@@ -1,5 +1,5 @@
-// Machine Learning Visualizer, desktop version using raylib.
-// Recreates the TypeScript web version: network view on top, data view below,
+// RiverML desktop pipeline, drawn with raylib.
+// Mirrors the TypeScript web version: model view on top, data view below,
 // sidebar with controls on the left.
 #include "raylib.h"
 #include "neuralnetwork.h"
@@ -10,6 +10,8 @@
 #include <cstring>
 #include <string>
 #include <vector>
+
+using namespace RiverML;
 
 //////////////////// app state ////////////////////
 
@@ -64,7 +66,7 @@ static bool gHiddenValid = true;
 static std::string gSeedBox;
 
 // XGBoost state
-static XGBoostEnsemble gXgb;
+static XGBoost gXgb;
 static float gShrinkage = 0.1f;
 static float gXgbMaxDepth = 4;
 static bool gLimitTrees = false;
@@ -524,7 +526,7 @@ static void drawSingleTree(Rectangle rect, int treeIndex, const std::vector<doub
     std::vector<int> path = tree.getPath(input);
     drawTree(tree, { rect.x, rect.y + 15, rect.width, rect.height - 15 }, path);
 
-    std::vector<double> pred = gXgb.predict(input);
+    std::vector<double> pred = gXgb.run(input);
     std::string predStr = "Prediction: ";
     for (size_t i = 0; i < pred.size(); i++) {
         snprintf(buf, sizeof(buf), i ? ", %.3f" : "%.3f", pred[i]);
@@ -673,7 +675,7 @@ static void drawLineGraph(Rectangle rect, std::vector<std::pair<double (*)(doubl
 
 // current model prediction, neural network or XGBoost
 static std::vector<double> predictModel(const std::vector<double>& in) {
-    if (gMethod == TrainMethod::XGBoost) return gXgb.predict(in);
+    if (gMethod == TrainMethod::XGBoost) return gXgb.run(in);
     return gPop.nets[0].run(in);
 }
 
@@ -727,8 +729,8 @@ static void loadSeed() {
     if (s.empty()) { showStatus("Paste a seed into the box first (cmd V)"); return; }
 
     if (s.rfind("XGBSEED1", 0) == 0) {
-        XGBoostEnsemble ens;
-        if (!XGBoostEnsemble::fromSeed(s, ens)) { showStatus("Invalid XGBoost seed"); return; }
+        XGBoost ens;
+        if (!XGBoost::fromSeed(s, ens)) { showStatus("Invalid XGBoost seed"); return; }
         if (ens.inputSize != gInputSize || ens.outputSize != gOutputSize) {
             showStatus(TextFormat("Seed is %din %dout, switch network format first",
                                   ens.inputSize, ens.outputSize));
@@ -769,7 +771,7 @@ static void loadSeed() {
 
 int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
-    InitWindow(1280, 800, "Machine Learning Visualizer");
+    InitWindow(1280, 800, "RiverML Pipeline");
     SetTargetFPS(60);
 
     rebuildPopulation();

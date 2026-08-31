@@ -1,1541 +1,1579 @@
 (() => {
-  // graphics.js
-  function drawCircle(ctx2, position, radius, opts = {}) {
-    if (radius <= 0) {
-      return;
-    }
-    const { fillStyle, strokeStyle, lineWidth, fill = true, stroke = false } = opts;
-    ctx2.beginPath();
-    ctx2.arc(position.x, position.y, radius, 0, Math.PI * 2);
-    if (lineWidth !== void 0)
-      ctx2.lineWidth = lineWidth;
-    if (fillStyle !== void 0)
-      ctx2.fillStyle = fillStyle;
-    if (strokeStyle !== void 0)
-      ctx2.strokeStyle = strokeStyle;
-    if (fill)
-      ctx2.fill();
-    if (stroke)
-      ctx2.stroke();
-  }
-
   // neuralnetwork.js
-  var NeuralNetworkList = class _NeuralNetworkList {
-    numOfNeuralNetworks = 0;
-    neuralNetworks = [];
-    generation = 0;
-    inputSize;
-    outputSize;
-    trainRMSE = 0;
-    trainMAE = 0;
-    testRMSE = 0;
-    testMAE = 0;
-    trialInputsList = [];
-    trialOutputsList = [];
-    trialPower = 2;
-    trainingData = [];
-    testInputs = [];
-    testFn = null;
-    constructor(numOfNeuralNetworks2, inputSize2, hiddenLayerSizes2, outputSize2, activationFunction2, outputActivationFunction2) {
-      this.numOfNeuralNetworks = numOfNeuralNetworks2;
-      for (let i = 0; i < numOfNeuralNetworks2; i++) {
-        const nn = new NeuralNetwork(inputSize2, hiddenLayerSizes2, outputSize2, activationFunction2, outputActivationFunction2);
-        this.neuralNetworks.push(nn);
-      }
-      this.inputSize = inputSize2;
-      this.outputSize = outputSize2;
-    }
-    run(inputs) {
-      this.neuralNetworks.forEach((nn) => nn.run(inputs));
-    }
-    mutate(numOfWeights, weightStrength, numOfBiases, biasesStrength) {
-      this.neuralNetworks.forEach((nn) => nn.mutate(numOfWeights, weightStrength, numOfBiases, biasesStrength));
-      return this;
-    }
-    static MIN_CELL_HEIGHT = 200;
-    getContentHeight(rowSize, displayHeaderHeight, displayHeader, panelHeight) {
-      const headerH = displayHeader ? displayHeaderHeight : 0;
-      const availableHeight = panelHeight - headerH;
-      const numRows = Math.ceil(this.neuralNetworks.length / rowSize);
-      const cellHeight = Math.max(_NeuralNetworkList.MIN_CELL_HEIGHT, availableHeight / numRows);
-      return headerH + numRows * cellHeight;
-    }
-    draw(ctx2, left, top, width, height, rowSize, displayHeaderHeight, displayHeader, displayErrorDigits, displayMeanError, scrollY = 0) {
-      let xSpace = width / rowSize;
-      const headerH = displayHeader ? displayHeaderHeight : 0;
-      const availableHeight = height - headerH;
-      const numRows = Math.ceil(this.neuralNetworks.length / rowSize);
-      let ySpace = Math.max(_NeuralNetworkList.MIN_CELL_HEIGHT, availableHeight / numRows);
-      ctx2.save();
-      ctx2.beginPath();
-      ctx2.rect(left, top + headerH, width, height - headerH);
-      ctx2.clip();
-      let col = 0;
-      let row = 0;
-      this.neuralNetworks.forEach((nn) => {
-        const y = top + ySpace * row + headerH - scrollY;
-        if (y + ySpace >= top + headerH && y < top + height) {
-          nn.draw(ctx2, left + xSpace * col, y, xSpace, ySpace, displayErrorDigits, displayMeanError);
-        }
-        col++;
-        if (col >= rowSize) {
-          col = 0;
-          row++;
-        }
-      });
-      const totalContentHeight = numRows * ySpace;
-      if (totalContentHeight > availableHeight) {
-        const scrollBarHeight = Math.max(20, availableHeight * (availableHeight / totalContentHeight));
-        const scrollBarY = top + headerH + scrollY / (totalContentHeight - availableHeight) * (availableHeight - scrollBarHeight);
-        ctx2.fillStyle = "rgba(0, 0, 0, 0.3)";
-        ctx2.fillRect(left + width - 6, scrollBarY, 4, scrollBarHeight);
-      }
-      ctx2.restore();
-    }
-    drawBest(ctx2, left, top, width, height, rowSize, displayHeaderHeight, displayHeader, displayErrorDigits, displayMeanError) {
-      this.sort();
-      if (displayHeader) {
-        this.drawHeader(ctx2, left, top, width, displayHeaderHeight);
-      }
-      this.neuralNetworks[0].draw(ctx2, left, top + (displayHeader ? 20 : 0), width, height - (displayHeader ? 20 : 0), displayErrorDigits, displayMeanError);
-    }
-    computeTestErr(predict) {
-      if (!this.testInputs.length || !this.testFn) {
-        this.testRMSE = 0;
-        this.testMAE = 0;
+  var RiverML;
+  (function(RiverML4) {
+    function drawCircle(ctx2, position, radius) {
+      if (radius <= 0) {
         return;
       }
-      let sqSum = 0;
-      let absSum = 0;
-      for (let i = 0; i < this.testInputs.length; i++) {
-        const pred = predict(this.testInputs[i]);
-        const expected = this.testFn(this.testInputs[i]);
-        for (let j = 0; j < pred.length; j++) {
-          const diff = Math.abs(pred[j] - expected[j]);
-          sqSum += diff ** 2;
-          absSum += diff;
+      ctx2.beginPath();
+      ctx2.arc(position.x, position.y, radius, 0, Math.PI * 2);
+      ctx2.fill();
+    }
+    class NeuralNetworkList2 {
+      numOfNeuralNetworks = 0;
+      neuralNetworks = [];
+      generation = 0;
+      inputSize;
+      outputSize;
+      trainRMSE = 0;
+      trainMAE = 0;
+      testRMSE = 0;
+      testMAE = 0;
+      trialInputsList = [];
+      trialOutputsList = [];
+      trialPower = 2;
+      trainingData = [];
+      testInputs = [];
+      testFn = null;
+      constructor(numOfNeuralNetworks2, inputSize2, hiddenLayerSizes2, outputSize2, activationFunction2, outputActivationFunction2) {
+        this.numOfNeuralNetworks = numOfNeuralNetworks2;
+        for (let i = 0; i < numOfNeuralNetworks2; i++) {
+          const nn = new NeuralNetwork2(inputSize2, hiddenLayerSizes2, outputSize2, activationFunction2, outputActivationFunction2);
+          this.neuralNetworks.push(nn);
         }
+        this.inputSize = inputSize2;
+        this.outputSize = outputSize2;
       }
-      this.testRMSE = Math.sqrt(sqSum / this.testInputs.length);
-      this.testMAE = absSum / this.testInputs.length;
-    }
-    drawHeader(ctx2, left, top, width, height) {
-      ctx2.save();
-      ctx2.fillStyle = "#e0e0e0";
-      ctx2.fillRect(left, top, width, height);
-      ctx2.font = "12px sans-serif";
-      ctx2.textBaseline = "middle";
-      ctx2.fillStyle = "#000000";
-      const text = `Gen: ${this.generation} | Train \u03F5 RMSE: ${this.trainRMSE.toFixed(4)} \u03BC MAE: ${this.trainMAE.toFixed(4)} | Test \u03F5 RMSE: ${this.testRMSE.toFixed(4)} \u03BC MAE: ${this.testMAE.toFixed(4)}`;
-      ctx2.fillText(text, left + 5, top + height / 2);
-      ctx2.restore();
-    }
-    // Draw XGBoost ensemble as a grid of small networks
-    drawXGBoostEnsemble(ctx2, left, top, width, height, displayHeaderHeight) {
-      ctx2.save();
-      ctx2.fillStyle = "#e0e0e0";
-      ctx2.fillRect(left, top, width, displayHeaderHeight);
-      ctx2.fillStyle = "#000000";
-      ctx2.font = "12px sans-serif";
-      ctx2.textBaseline = "middle";
-      ctx2.fillText(`Gen: ${this.generation} | Ensemble: ${this.neuralNetworks.length} networks`, left + 5, top + displayHeaderHeight / 2);
-      const contentHeight = height - displayHeaderHeight;
-      const cols = Math.min(4, this.neuralNetworks.length);
-      const rows = Math.ceil(this.neuralNetworks.length / cols);
-      const cellWidth = width / cols;
-      const cellHeight = contentHeight / rows;
-      for (let i = 0; i < this.neuralNetworks.length; i++) {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const x = left + col * cellWidth;
-        const y = top + displayHeaderHeight + row * cellHeight;
-        ctx2.fillStyle = i === 0 ? "#f0f0ff" : "#f8f8f8";
-        ctx2.fillRect(x + 2, y + 2, cellWidth - 4, cellHeight - 4);
+      run(inputs) {
+        this.neuralNetworks.forEach((nn) => nn.forward(inputs));
+      }
+      mutate(numOfWeights, weightStrength, numOfBiases, biasesStrength) {
+        this.neuralNetworks.forEach((nn) => nn.mutate(numOfWeights, weightStrength, numOfBiases, biasesStrength));
+        return this;
+      }
+      static MIN_CELL_HEIGHT = 200;
+      getContentHeight(rowSize, displayHeaderHeight, displayHeader, panelHeight) {
+        const headerH = displayHeader ? displayHeaderHeight : 0;
+        const availableHeight = panelHeight - headerH;
+        const numRows = Math.ceil(this.neuralNetworks.length / rowSize);
+        const cellHeight = Math.max(NeuralNetworkList2.MIN_CELL_HEIGHT, availableHeight / numRows);
+        return headerH + numRows * cellHeight;
+      }
+      draw(ctx2, left, top, width, height, rowSize, displayHeaderHeight, displayHeader, displayErrorDigits, displayMeanError, scrollY = 0) {
+        let xSpace = width / rowSize;
+        const headerH = displayHeader ? displayHeaderHeight : 0;
+        const availableHeight = height - headerH;
+        const numRows = Math.ceil(this.neuralNetworks.length / rowSize);
+        let ySpace = Math.max(NeuralNetworkList2.MIN_CELL_HEIGHT, availableHeight / numRows);
+        ctx2.save();
+        ctx2.beginPath();
+        ctx2.rect(left, top + headerH, width, height - headerH);
+        ctx2.clip();
+        let col = 0;
+        let row = 0;
+        this.neuralNetworks.forEach((nn) => {
+          const y = top + ySpace * row + headerH - scrollY;
+          if (y + ySpace >= top + headerH && y < top + height) {
+            nn.draw(ctx2, left + xSpace * col, y, xSpace, ySpace, displayErrorDigits, displayMeanError);
+          }
+          col++;
+          if (col >= rowSize) {
+            col = 0;
+            row++;
+          }
+        });
+        const totalContentHeight = numRows * ySpace;
+        if (totalContentHeight > availableHeight) {
+          const scrollBarHeight = Math.max(20, availableHeight * (availableHeight / totalContentHeight));
+          const scrollBarY = top + headerH + scrollY / (totalContentHeight - availableHeight) * (availableHeight - scrollBarHeight);
+          ctx2.fillStyle = "rgba(0, 0, 0, 0.3)";
+          ctx2.fillRect(left + width - 6, scrollBarY, 4, scrollBarHeight);
+        }
+        ctx2.restore();
+      }
+      drawBest(ctx2, left, top, width, height, rowSize, displayHeaderHeight, displayHeader, displayErrorDigits, displayMeanError) {
+        this.sort();
+        if (displayHeader) {
+          this.drawHeader(ctx2, left, top, width, displayHeaderHeight);
+        }
+        this.neuralNetworks[0].draw(ctx2, left, top + (displayHeader ? 20 : 0), width, height - (displayHeader ? 20 : 0), displayErrorDigits, displayMeanError);
+      }
+      computeTestErr(predict) {
+        if (!this.testInputs.length || !this.testFn) {
+          this.testRMSE = 0;
+          this.testMAE = 0;
+          return;
+        }
+        let sqSum = 0;
+        let absSum = 0;
+        for (let i = 0; i < this.testInputs.length; i++) {
+          const pred = predict(this.testInputs[i]);
+          const expected = this.testFn(this.testInputs[i]);
+          for (let j = 0; j < pred.length; j++) {
+            const diff = Math.abs(pred[j] - expected[j]);
+            sqSum += diff ** 2;
+            absSum += diff;
+          }
+        }
+        this.testRMSE = Math.sqrt(sqSum / this.testInputs.length);
+        this.testMAE = absSum / this.testInputs.length;
+      }
+      drawHeader(ctx2, left, top, width, height) {
+        ctx2.save();
+        ctx2.fillStyle = "#e0e0e0";
+        ctx2.fillRect(left, top, width, height);
+        ctx2.font = "12px sans-serif";
+        ctx2.textBaseline = "middle";
         ctx2.fillStyle = "#000000";
-        ctx2.font = "10px sans-serif";
-        ctx2.fillText(`#${i}${i === 0 ? " (base)" : ""}`, x + 5, y + 12);
-        this.neuralNetworks[i].draw(ctx2, x + 5, y + 20, cellWidth - 10, cellHeight - 25);
+        const text = `Gen: ${this.generation} | Train \u03F5 RMSE: ${this.trainRMSE.toFixed(4)} \u03BC MAE: ${this.trainMAE.toFixed(4)} | Test \u03F5 RMSE: ${this.testRMSE.toFixed(4)} \u03BC MAE: ${this.testMAE.toFixed(4)}`;
+        ctx2.fillText(text, left + 5, top + height / 2);
+        ctx2.restore();
       }
-      ctx2.restore();
-    }
-    testError(outputs, power) {
-      if (outputs.length !== this.outputSize) {
-        console.error("Wrong number of outputs, expected: " + this.outputSize + " | received: " + outputs.length);
-        return 0;
-      }
-      this.neuralNetworks.forEach((nn) => {
-        nn.testError(outputs, false, power);
-      });
-    }
-    display2Input1OutputDataPoints(test2, ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, outputMiddle, outputRange) {
-      ctx2.save();
-      ctx2.rect(left, top, width, height);
-      ctx2.clip();
-      this.trialInputsList.forEach((input) => {
-        const x = left + (input[0] - axis1low) / (axis1high - axis1low) * width;
-        const y = top + (input[1] - axis2low) / (axis2high - axis2low) * height;
-        ctx2.fillStyle = "black";
-        drawCircle(ctx2, { x, y }, Math.min(width, height) / 100);
-        ctx2.fillStyle = this.numToColorWhite((test2(input)[0] - outputMiddle) / outputRange);
-        drawCircle(ctx2, { x, y }, Math.min(width, height) / 120);
-      });
-      ctx2.restore();
-    }
-    display2Input2OutputDataPoints(test2, ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, color12, color22) {
-      ctx2.save();
-      ctx2.rect(left, top, width, height);
-      ctx2.clip();
-      this.trialInputsList.forEach((input) => {
-        const x = left + (input[0] - axis1low) / (axis1high - axis1low) * width;
-        const y = top + (input[1] - axis2low) / (axis2high - axis2low) * height;
-        const outputs = test2(input);
-        ctx2.fillStyle = "black";
-        drawCircle(ctx2, { x, y }, Math.min(width, height) / 100);
-        ctx2.fillStyle = this.neuralNetworks[0].interpolateColorPublic(color12, color22, outputs[0]);
-        drawCircle(ctx2, { x, y }, Math.min(width, height) / 120);
-      });
-      ctx2.restore();
-    }
-    testErrorTrials(inputsList, outputsList, power) {
-      if (inputsList.length !== outputsList.length) {
-        console.error("Wrong number of inputs or outputs, expected: " + inputsList.length + " | received: " + outputsList.length);
-        return 0;
-      }
-      const p = power || 2;
-      this.neuralNetworks.forEach((nn) => {
-        for (let i = 0; i < inputsList.length; i++) {
-          nn.run(inputsList[i]);
-          nn.testError(outputsList[i], true, p);
+      // Draw XGBoost ensemble as a grid of small networks
+      drawXGBoostEnsemble(ctx2, left, top, width, height, displayHeaderHeight) {
+        ctx2.save();
+        ctx2.fillStyle = "#e0e0e0";
+        ctx2.fillRect(left, top, width, displayHeaderHeight);
+        ctx2.fillStyle = "#000000";
+        ctx2.font = "12px sans-serif";
+        ctx2.textBaseline = "middle";
+        ctx2.fillText(`Gen: ${this.generation} | Ensemble: ${this.neuralNetworks.length} networks`, left + 5, top + displayHeaderHeight / 2);
+        const contentHeight = height - displayHeaderHeight;
+        const cols = Math.min(4, this.neuralNetworks.length);
+        const rows = Math.ceil(this.neuralNetworks.length / cols);
+        const cellWidth = width / cols;
+        const cellHeight = contentHeight / rows;
+        for (let i = 0; i < this.neuralNetworks.length; i++) {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          const x = left + col * cellWidth;
+          const y = top + displayHeaderHeight + row * cellHeight;
+          ctx2.fillStyle = i === 0 ? "#f0f0ff" : "#f8f8f8";
+          ctx2.fillRect(x + 2, y + 2, cellWidth - 4, cellHeight - 4);
+          ctx2.fillStyle = "#000000";
+          ctx2.font = "10px sans-serif";
+          ctx2.fillText(`#${i}${i === 0 ? " (base)" : ""}`, x + 5, y + 12);
+          this.neuralNetworks[i].draw(ctx2, x + 5, y + 20, cellWidth - 10, cellHeight - 25);
         }
-        nn.error = (nn.error / inputsList.length) ** (1 / p);
-        nn.meanError /= inputsList.length;
-      });
-    }
-    resetError() {
-      this.neuralNetworks.forEach((nn) => {
-        nn.error = 0;
-        nn.meanError = 0;
-      });
-    }
-    createTrials(inputsList, outputFunction) {
-      this.trialInputsList = inputsList;
-      this.trialOutputsList = [];
-      this.trialInputsList.forEach((i) => {
-        this.trialOutputsList.push(outputFunction(i));
-      });
-    }
-    killLowestError(numOfNeuralNetworks2) {
-      this.sort();
-      this.neuralNetworks = this.neuralNetworks.slice(0, numOfNeuralNetworks2);
-    }
-    reproduceSurvivors(numOfWeights, weightStrength, numOfBiases, biasesStrength) {
-      let numOfSurvivors = this.neuralNetworks.length;
-      let index = 0;
-      while (this.neuralNetworks.length < this.numOfNeuralNetworks - 1) {
-        let nn = this.neuralNetworks[index].clone();
-        nn.mutate(numOfWeights, weightStrength, numOfBiases, biasesStrength);
-        this.neuralNetworks.push(nn);
-        index++;
-        if (index >= numOfSurvivors) {
-          index = 0;
-        }
+        ctx2.restore();
       }
-      this.neuralNetworks.push(new NeuralNetwork(this.neuralNetworks[0].inputSize, this.neuralNetworks[0].hiddenLayerSizes, this.neuralNetworks[0].outputSize, this.neuralNetworks[0].activationFunction, this.neuralNetworks[0].outputActivationFunction));
-    }
-    runGeneration(numOfWeights, weightStrength, numOfBiases, biasesStrength) {
-      this.generation++;
-      this.resetError();
-      this.testErrorTrials(this.trialInputsList, this.trialOutputsList, this.trialPower);
-      this.sort();
-      const bestError = this.neuralNetworks[0].error;
-      this.trainRMSE = bestError;
-      this.trainMAE = this.neuralNetworks[0].meanError;
-      this.killLowestError(Math.floor(this.numOfNeuralNetworks / 2));
-      this.reproduceSurvivors(numOfWeights, weightStrength, numOfBiases, biasesStrength);
-      return bestError;
-    }
-    setLearningRate(learningRate2) {
-      this.neuralNetworks.forEach((nn) => {
-        nn.learningRate = learningRate2;
-      });
-    }
-    setMomentum(momentum2) {
-      this.neuralNetworks.forEach((nn) => {
-        nn.momentum = momentum2;
-      });
-    }
-    _backpropWorker = null;
-    _backpropBestError = Infinity;
-    trainBackpropagation(epochs = 1) {
-      this.generation++;
-      if (!this._backpropWorker) {
-        this._backpropWorker = this.neuralNetworks[0].clone();
+      testError(outputs, power) {
+        if (outputs.length !== this.outputSize) {
+          console.error("Wrong number of outputs, expected: " + this.outputSize + " | received: " + outputs.length);
+          return 0;
+        }
+        this.neuralNetworks.forEach((nn) => {
+          nn.testError(outputs, false, power);
+        });
+      }
+      display2Input1OutputDataPoints(test2, ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, outputMiddle, outputRange) {
+        ctx2.save();
+        ctx2.rect(left, top, width, height);
+        ctx2.clip();
+        this.trialInputsList.forEach((input) => {
+          const x = left + (input[0] - axis1low) / (axis1high - axis1low) * width;
+          const y = top + (input[1] - axis2low) / (axis2high - axis2low) * height;
+          ctx2.fillStyle = "black";
+          drawCircle(ctx2, { x, y }, Math.min(width, height) / 100);
+          ctx2.fillStyle = this.numToColorWhite((test2(input)[0] - outputMiddle) / outputRange);
+          drawCircle(ctx2, { x, y }, Math.min(width, height) / 120);
+        });
+        ctx2.restore();
+      }
+      display2Input2OutputDataPoints(test2, ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, color12, color22) {
+        ctx2.save();
+        ctx2.rect(left, top, width, height);
+        ctx2.clip();
+        this.trialInputsList.forEach((input) => {
+          const x = left + (input[0] - axis1low) / (axis1high - axis1low) * width;
+          const y = top + (input[1] - axis2low) / (axis2high - axis2low) * height;
+          const outputs = test2(input);
+          ctx2.fillStyle = "black";
+          drawCircle(ctx2, { x, y }, Math.min(width, height) / 100);
+          ctx2.fillStyle = this.neuralNetworks[0].interpolateColorPublic(color12, color22, outputs[0]);
+          drawCircle(ctx2, { x, y }, Math.min(width, height) / 120);
+        });
+        ctx2.restore();
+      }
+      testErrorTrials(inputsList, outputsList, power) {
+        if (inputsList.length !== outputsList.length) {
+          console.error("Wrong number of inputs or outputs, expected: " + inputsList.length + " | received: " + outputsList.length);
+          return 0;
+        }
+        const p = power || 2;
+        this.neuralNetworks.forEach((nn) => {
+          for (let i = 0; i < inputsList.length; i++) {
+            nn.forward(inputsList[i]);
+            nn.testError(outputsList[i], true, p);
+          }
+          nn.error = (nn.error / inputsList.length) ** (1 / p);
+          nn.meanError /= inputsList.length;
+        });
+      }
+      resetError() {
+        this.neuralNetworks.forEach((nn) => {
+          nn.error = 0;
+          nn.meanError = 0;
+        });
+      }
+      createTrials(inputsList, outputFunction) {
+        this.trialInputsList = inputsList;
+        this.trialOutputsList = [];
+        this.trialInputsList.forEach((i) => {
+          this.trialOutputsList.push(outputFunction(i));
+        });
+      }
+      killLowestError(numOfNeuralNetworks2) {
+        this.sort();
+        this.neuralNetworks = this.neuralNetworks.slice(0, numOfNeuralNetworks2);
+      }
+      reproduceSurvivors(numOfWeights, weightStrength, numOfBiases, biasesStrength) {
+        let numOfSurvivors = this.neuralNetworks.length;
+        let index = 0;
+        while (this.neuralNetworks.length < this.numOfNeuralNetworks - 1) {
+          let nn = this.neuralNetworks[index].clone();
+          nn.mutate(numOfWeights, weightStrength, numOfBiases, biasesStrength);
+          this.neuralNetworks.push(nn);
+          index++;
+          if (index >= numOfSurvivors) {
+            index = 0;
+          }
+        }
+        this.neuralNetworks.push(new NeuralNetwork2(this.neuralNetworks[0].inputSize, this.neuralNetworks[0].hiddenLayerSizes, this.neuralNetworks[0].outputSize, this.neuralNetworks[0].activationFunction, this.neuralNetworks[0].outputActivationFunction));
+      }
+      runGeneration(numOfWeights, weightStrength, numOfBiases, biasesStrength) {
+        this.generation++;
+        this.resetError();
+        this.testErrorTrials(this.trialInputsList, this.trialOutputsList, this.trialPower);
+        this.sort();
+        const bestError = this.neuralNetworks[0].error;
+        this.trainRMSE = bestError;
+        this.trainMAE = this.neuralNetworks[0].meanError;
+        this.killLowestError(Math.floor(this.numOfNeuralNetworks / 2));
+        this.reproduceSurvivors(numOfWeights, weightStrength, numOfBiases, biasesStrength);
+        return bestError;
+      }
+      setLearningRate(learningRate2) {
+        this.neuralNetworks.forEach((nn) => {
+          nn.learningRate = learningRate2;
+        });
+      }
+      setMomentum(momentum2) {
+        this.neuralNetworks.forEach((nn) => {
+          nn.momentum = momentum2;
+        });
+      }
+      _backpropWorker = null;
+      _backpropBestError = Infinity;
+      trainBackpropagation(epochs = 1) {
+        this.generation++;
+        if (!this._backpropWorker) {
+          this._backpropWorker = this.neuralNetworks[0].clone();
+          this._backpropBestError = Infinity;
+        }
+        for (let epoch = 0; epoch < epochs; epoch++) {
+          this._backpropWorker.trainBatch(this.trialInputsList, this.trialOutputsList);
+        }
+        this._backpropWorker.error = 0;
+        this._backpropWorker.meanError = 0;
+        for (let i = 0; i < this.trialInputsList.length; i++) {
+          this._backpropWorker.forward(this.trialInputsList[i]);
+          this._backpropWorker.testError(this.trialOutputsList[i], true, this.trialPower);
+        }
+        this._backpropWorker.error = (this._backpropWorker.error / this.trialInputsList.length) ** (1 / this.trialPower);
+        this._backpropWorker.meanError /= this.trialInputsList.length;
+        if (this._backpropWorker.error < this._backpropBestError) {
+          this._backpropBestError = this._backpropWorker.error;
+          this.neuralNetworks[0] = this._backpropWorker.clone();
+        }
+        this.trainRMSE = this._backpropBestError;
+        this.trainMAE = this.neuralNetworks[0].meanError;
+        return this._backpropBestError;
+      }
+      resetBackpropWorker() {
+        this._backpropWorker = null;
         this._backpropBestError = Infinity;
       }
-      for (let epoch = 0; epoch < epochs; epoch++) {
-        this._backpropWorker.trainBatch(this.trialInputsList, this.trialOutputsList);
-      }
-      this._backpropWorker.error = 0;
-      this._backpropWorker.meanError = 0;
-      for (let i = 0; i < this.trialInputsList.length; i++) {
-        this._backpropWorker.run(this.trialInputsList[i]);
-        this._backpropWorker.testError(this.trialOutputsList[i], true, this.trialPower);
-      }
-      this._backpropWorker.error = (this._backpropWorker.error / this.trialInputsList.length) ** (1 / this.trialPower);
-      this._backpropWorker.meanError /= this.trialInputsList.length;
-      if (this._backpropWorker.error < this._backpropBestError) {
-        this._backpropBestError = this._backpropWorker.error;
-        this.neuralNetworks[0] = this._backpropWorker.clone();
-      }
-      this.trainRMSE = this._backpropBestError;
-      this.trainMAE = this.neuralNetworks[0].meanError;
-      return this._backpropBestError;
-    }
-    resetBackpropWorker() {
-      this._backpropWorker = null;
-      this._backpropBestError = Infinity;
-    }
-    // XGBoost-style training: Add one new network to ensemble, trained on residuals
-    trainXGBoost(epochs = 10, shrinkage = 0.1) {
-      this.generation++;
-      const residuals = [];
-      for (let i = 0; i < this.trialInputsList.length; i++) {
-        const ensemblePred = this.runEnsemble(this.trialInputsList[i]);
-        const target = this.trialOutputsList[i];
-        const residual = target.map((t, idx) => t - ensemblePred[idx]);
-        residuals.push(residual);
-      }
-      const newNetwork = this.neuralNetworks[0].clone();
-      newNetwork.randomize();
-      for (let epoch = 0; epoch < epochs; epoch++) {
-        newNetwork.trainBatch(this.trialInputsList, residuals);
-      }
-      newNetwork.shrinkWeights(shrinkage);
-      this.neuralNetworks.push(newNetwork);
-      this.numOfNeuralNetworks = this.neuralNetworks.length;
-      this.resetError();
-      for (let i = 0; i < this.trialInputsList.length; i++) {
-        const ensemblePred = this.runEnsemble(this.trialInputsList[i]);
-        const target = this.trialOutputsList[i];
-        let error = 0;
-        for (let j = 0; j < this.outputSize; j++) {
-          error += Math.abs(ensemblePred[j] - target[j]) ** this.trialPower;
+      // XGBoost-style training: Add one new network to ensemble, trained on residuals
+      trainXGBoost(epochs = 10, shrinkage = 0.1) {
+        this.generation++;
+        const residuals = [];
+        for (let i = 0; i < this.trialInputsList.length; i++) {
+          const ensemblePred = this.runEnsemble(this.trialInputsList[i]);
+          const target = this.trialOutputsList[i];
+          const residual = target.map((t, idx) => t - ensemblePred[idx]);
+          residuals.push(residual);
         }
-        this.neuralNetworks[0].error += error;
-      }
-      this.neuralNetworks[0].error = (this.neuralNetworks[0].error / this.trialInputsList.length) ** (1 / this.trialPower);
-      return this.neuralNetworks[0].error;
-    }
-    // Run ensemble prediction (sum of all network outputs)
-    runEnsemble(inputs) {
-      const output = new Array(this.outputSize).fill(0);
-      for (const nn of this.neuralNetworks) {
-        const result = nn.run(inputs);
-        for (let i = 0; i < this.outputSize; i++) {
-          output[i] += result.neurons[i].value;
+        const newNetwork = this.neuralNetworks[0].clone();
+        newNetwork.randomize();
+        for (let epoch = 0; epoch < epochs; epoch++) {
+          newNetwork.trainBatch(this.trialInputsList, residuals);
         }
-      }
-      return output;
-    }
-    // Get a virtual network representing the ensemble for display purposes
-    getEnsembleNetwork() {
-      const ensemble = this.neuralNetworks[0].clone();
-      const originalRun = ensemble.run.bind(ensemble);
-      ensemble.run = (inputs) => {
-        const ensembleOutput = this.runEnsemble(inputs);
-        originalRun(inputs);
-        for (let i = 0; i < ensembleOutput.length; i++) {
-          ensemble.getOutputLayer().neurons[i].value = ensembleOutput[i];
-        }
-        return ensemble.getOutputLayer();
-      };
-      return ensemble;
-    }
-    sort() {
-      this.neuralNetworks.sort((a, b) => a.error - b.error);
-    }
-    numToColorBlack(num) {
-      if (num >= 0) {
-        return "rgb(0, " + Math.tanh(num) * 255 + ",0)";
-      }
-      if (num < 0) {
-        return "rgb(" + -Math.tanh(num) * 255 + ", 0 ,0)";
-      }
-      return "";
-    }
-    numToColorWhite(num) {
-      if (num >= 0) {
-        return "rgb(" + (1 - Math.tanh(num)) * 255 + ", 255," + (1 - Math.tanh(num)) * 255 + ")";
-      }
-      if (num < 0) {
-        return "rgb(255, " + (1 + Math.tanh(num)) * 255 + "," + (1 + Math.tanh(num)) * 255 + ")";
-      }
-      return "";
-    }
-  };
-  var NeuralNetwork = class _NeuralNetwork {
-    error = 0;
-    meanError = 0;
-    numOfLayers;
-    inputSize;
-    hiddenLayerSizes;
-    outputSize;
-    startRandomBias = true;
-    startRandomWeights = true;
-    clampBiases = false;
-    clampWeights = false;
-    changeWeightAlpha = false;
-    linePower = 4;
-    layers = [];
-    activationFunction = "tanh";
-    outputActivationFunction = "tanh";
-    // For backpropagation
-    learningRate = 0.01;
-    // Default learning rate (adjustable via UI)
-    momentum = 0.9;
-    // Default momentum (adjustable via UI)
-    constructor(inputSize2, hiddenLayerSizes2, outputSize2, activationFunction2, outputActivationFunction2) {
-      this.numOfLayers = hiddenLayerSizes2.length + 2;
-      this.inputSize = inputSize2;
-      this.hiddenLayerSizes = hiddenLayerSizes2;
-      this.outputSize = outputSize2;
-      this.activationFunction = activationFunction2;
-      this.outputActivationFunction = outputActivationFunction2;
-      this.initLayers();
-    }
-    run(inputs) {
-      if (inputs.length != this.inputSize) {
-        throw new Error("Wrong Number of INPUTs, Expected: " + this.inputSize + "| Received: " + inputs.length);
-      }
-      for (let i = 0; i < this.inputSize; i++) {
-        this.layers[0].neurons[i].value = inputs[i];
-      }
-      for (let l = 1; l < this.numOfLayers; l++) {
-        let neurons = this.layers[l].neurons;
-        for (let n = 0; n < neurons.length; n++) {
-          let neuron = neurons[n];
-          neuron.value = 0;
-          let weights = neuron.weights;
-          for (let w = 0; w < weights.length; w++) {
-            let weight = weights[w];
-            neuron.value += weight.value * this.getNodeValue(weight.to);
+        newNetwork.shrinkWeights(shrinkage);
+        this.neuralNetworks.push(newNetwork);
+        this.numOfNeuralNetworks = this.neuralNetworks.length;
+        this.resetError();
+        for (let i = 0; i < this.trialInputsList.length; i++) {
+          const ensemblePred = this.runEnsemble(this.trialInputsList[i]);
+          const target = this.trialOutputsList[i];
+          let error = 0;
+          for (let j = 0; j < this.outputSize; j++) {
+            error += Math.abs(ensemblePred[j] - target[j]) ** this.trialPower;
           }
-          neuron.value += neuron.bias;
-          neuron.activate();
+          this.neuralNetworks[0].error += error;
         }
+        this.neuralNetworks[0].error = (this.neuralNetworks[0].error / this.trialInputsList.length) ** (1 / this.trialPower);
+        return this.neuralNetworks[0].error;
       }
-      return this.layers[this.layers.length - 1];
-    }
-    mutate(numOfWeights, weightStrength, numOfBiases, biasesStrength) {
-      for (let i = 0; i < numOfWeights; i++) {
-        let randLayerIndex = Math.floor(Math.random() * (this.numOfLayers - 1)) + 1;
-        let neurons = this.layers[randLayerIndex].neurons;
-        let randNeuronIndex = Math.floor(Math.random() * neurons.length);
-        let weights = this.layers[randLayerIndex].neurons[randNeuronIndex].weights;
-        let randWeightsIndex = Math.floor(Math.random() * weights.length);
-        weights[randWeightsIndex].value += (Math.random() * 2 - 1) * weightStrength;
-        if (this.clampWeights) {
-          weights[randWeightsIndex].value = Math.min(Math.max(weights[randWeightsIndex].value, -1), 1);
-        }
-      }
-      for (let i = 0; i < numOfBiases; i++) {
-        let randLayerIndex = Math.floor(Math.random() * (this.numOfLayers - 1)) + 1;
-        let neurons = this.layers[randLayerIndex].neurons;
-        let randNeuronIndex = Math.floor(Math.random() * neurons.length);
-        neurons[randNeuronIndex].bias += (Math.random() * 2 - 1) * biasesStrength;
-        if (this.clampBiases) {
-          neurons[randNeuronIndex].bias = Math.min(Math.max(neurons[randNeuronIndex].bias, -1), 1);
-        }
-      }
-    }
-    // Randomize all weights and biases (for creating new networks in XGBoost)
-    randomize() {
-      for (let l = 1; l < this.numOfLayers; l++) {
-        const scale = Math.min(1, Math.sqrt(6 / this.layers[l - 1].neurons.length));
-        for (let n = 0; n < this.layers[l].neurons.length; n++) {
-          const neuron = this.layers[l].neurons[n];
-          neuron.bias = (Math.random() * 2 - 1) * 0.5;
-          for (let w = 0; w < neuron.weights.length; w++) {
-            neuron.weights[w].value = (Math.random() * 2 - 1) * scale;
+      // Run ensemble prediction (sum of all network outputs)
+      runEnsemble(inputs) {
+        const output = new Array(this.outputSize).fill(0);
+        for (const nn of this.neuralNetworks) {
+          const result = nn.run(inputs);
+          for (let i = 0; i < this.outputSize; i++) {
+            output[i] += result[i];
           }
         }
+        return output;
+      }
+      // Get a virtual network representing the ensemble for display purposes
+      getEnsembleNetwork() {
+        const ensemble = this.neuralNetworks[0].clone();
+        const originalForward = ensemble.forward.bind(ensemble);
+        ensemble.run = (inputs) => {
+          originalForward(inputs);
+          const ensembleOutput = this.runEnsemble(inputs);
+          for (let i = 0; i < ensembleOutput.length; i++) {
+            ensemble.getOutputLayer().neurons[i].value = ensembleOutput[i];
+          }
+          return ensembleOutput;
+        };
+        return ensemble;
+      }
+      sort() {
+        this.neuralNetworks.sort((a, b) => a.error - b.error);
+      }
+      numToColorBlack(num) {
+        if (num >= 0) {
+          return "rgb(0, " + Math.tanh(num) * 255 + ",0)";
+        }
+        if (num < 0) {
+          return "rgb(" + -Math.tanh(num) * 255 + ", 0 ,0)";
+        }
+        return "";
+      }
+      numToColorWhite(num) {
+        if (num >= 0) {
+          return "rgb(" + (1 - Math.tanh(num)) * 255 + ", 255," + (1 - Math.tanh(num)) * 255 + ")";
+        }
+        if (num < 0) {
+          return "rgb(255, " + (1 + Math.tanh(num)) * 255 + "," + (1 + Math.tanh(num)) * 255 + ")";
+        }
+        return "";
       }
     }
-    testError(outputs, additive, power) {
-      let sum = 0;
-      let meanSum = 0;
-      const p = power || 2;
-      for (let i = 0; i < this.outputSize; i++) {
-        const diff = Math.abs(this.getOutputLayer().neurons[i].value - outputs[i]);
-        sum += diff ** p;
-        meanSum += diff;
+    RiverML4.NeuralNetworkList = NeuralNetworkList2;
+    class NeuralNetwork2 {
+      error = 0;
+      meanError = 0;
+      numOfLayers;
+      inputSize;
+      hiddenLayerSizes;
+      outputSize;
+      startRandomBias = true;
+      startRandomWeights = true;
+      clampBiases = false;
+      clampWeights = false;
+      changeWeightAlpha = false;
+      linePower = 4;
+      layers = [];
+      activationFunction = "tanh";
+      outputActivationFunction = "tanh";
+      // For backpropagation
+      learningRate = 0.01;
+      // Default learning rate (adjustable via UI)
+      momentum = 0.9;
+      // Default momentum (adjustable via UI)
+      constructor(inputSizeOrSeed, hiddenLayerSizes2, outputSize2, activationFunction2, outputActivationFunction2) {
+        if (typeof inputSizeOrSeed === "string") {
+          const parts = inputSizeOrSeed.trim().split("|");
+          if (parts.length !== 5 || parts[0] !== "NNSEED1") {
+            throw new Error("Invalid seed: expected NNSEED1|act|outAct|sizes|params");
+          }
+          const sizes = parts[3].split(",").map(Number);
+          if (sizes.length < 2 || sizes.some((s) => !(s > 0))) {
+            throw new Error("Invalid seed: bad layer sizes");
+          }
+          this.numOfLayers = sizes.length;
+          this.inputSize = sizes[0];
+          this.hiddenLayerSizes = sizes.slice(1, -1);
+          this.outputSize = sizes[sizes.length - 1];
+          this.activationFunction = parts[1];
+          this.outputActivationFunction = parts[2];
+          this.initLayers();
+          const params = parts[4].split(",");
+          let p = 0;
+          for (let l = 1; l < this.numOfLayers; l++) {
+            for (const neuron of this.layers[l].neurons) {
+              neuron.bias = Number(params[p++]);
+              for (const w of neuron.weights)
+                w.value = Number(params[p++]);
+            }
+          }
+          if (p !== params.length || params.some((v) => isNaN(Number(v)))) {
+            throw new Error("Invalid seed: wrong number of parameters");
+          }
+          return;
+        }
+        this.numOfLayers = hiddenLayerSizes2.length + 2;
+        this.inputSize = inputSizeOrSeed;
+        this.hiddenLayerSizes = hiddenLayerSizes2;
+        this.outputSize = outputSize2;
+        this.activationFunction = activationFunction2;
+        this.outputActivationFunction = outputActivationFunction2;
+        this.initLayers();
       }
-      if (additive) {
-        this.error += sum;
-        this.meanError += meanSum;
-      } else {
-        this.error = sum;
-        this.meanError = meanSum;
+      // Forward pass returning just the output values
+      run(inputs) {
+        this.forward(inputs);
+        const outputs = this.getOutputLayer().neurons;
+        const values = new Array(outputs.length);
+        for (let i = 0; i < outputs.length; i++)
+          values[i] = outputs[i].value;
+        return values;
       }
-    }
-    // Backpropagation: calculate gradients for all weights and biases
-    backPropogate(targetOutputs, resetGradients = true) {
-      if (targetOutputs.length !== this.outputSize) {
-        throw new Error("Wrong number of target outputs");
-      }
-      if (resetGradients) {
+      // Forward pass that only fills the layers, used by training and drawing
+      forward(inputs) {
+        if (inputs.length != this.inputSize) {
+          throw new Error("Wrong Number of INPUTs, Expected: " + this.inputSize + "| Received: " + inputs.length);
+        }
+        for (let i = 0; i < this.inputSize; i++) {
+          this.layers[0].neurons[i].value = inputs[i];
+        }
         for (let l = 1; l < this.numOfLayers; l++) {
+          let neurons = this.layers[l].neurons;
+          for (let n = 0; n < neurons.length; n++) {
+            let neuron = neurons[n];
+            neuron.value = 0;
+            let weights = neuron.weights;
+            for (let w = 0; w < weights.length; w++) {
+              let weight = weights[w];
+              neuron.value += weight.value * this.getNodeValue(weight.to);
+            }
+            neuron.value += neuron.bias;
+            neuron.activate();
+          }
+        }
+        return this.layers[this.layers.length - 1];
+      }
+      mutate(numOfWeights, weightStrength, numOfBiases, biasesStrength) {
+        for (let i = 0; i < numOfWeights; i++) {
+          let randLayerIndex = Math.floor(Math.random() * (this.numOfLayers - 1)) + 1;
+          let neurons = this.layers[randLayerIndex].neurons;
+          let randNeuronIndex = Math.floor(Math.random() * neurons.length);
+          let weights = this.layers[randLayerIndex].neurons[randNeuronIndex].weights;
+          let randWeightsIndex = Math.floor(Math.random() * weights.length);
+          weights[randWeightsIndex].value += (Math.random() * 2 - 1) * weightStrength;
+          if (this.clampWeights) {
+            weights[randWeightsIndex].value = Math.min(Math.max(weights[randWeightsIndex].value, -1), 1);
+          }
+        }
+        for (let i = 0; i < numOfBiases; i++) {
+          let randLayerIndex = Math.floor(Math.random() * (this.numOfLayers - 1)) + 1;
+          let neurons = this.layers[randLayerIndex].neurons;
+          let randNeuronIndex = Math.floor(Math.random() * neurons.length);
+          neurons[randNeuronIndex].bias += (Math.random() * 2 - 1) * biasesStrength;
+          if (this.clampBiases) {
+            neurons[randNeuronIndex].bias = Math.min(Math.max(neurons[randNeuronIndex].bias, -1), 1);
+          }
+        }
+      }
+      // Randomize all weights and biases (for creating new networks in XGBoost)
+      randomize() {
+        for (let l = 1; l < this.numOfLayers; l++) {
+          const scale = Math.min(1, Math.sqrt(6 / this.layers[l - 1].neurons.length));
           for (let n = 0; n < this.layers[l].neurons.length; n++) {
-            this.layers[l].neurons[n].gradient = 0;
-            for (let w = 0; w < this.layers[l].neurons[n].weights.length; w++) {
-              this.layers[l].neurons[n].weights[w].gradient = 0;
+            const neuron = this.layers[l].neurons[n];
+            neuron.bias = (Math.random() * 2 - 1) * 0.5;
+            for (let w = 0; w < neuron.weights.length; w++) {
+              neuron.weights[w].value = (Math.random() * 2 - 1) * scale;
             }
           }
         }
       }
-      const outputLayer = this.layers[this.numOfLayers - 1];
-      for (let i = 0; i < outputLayer.neurons.length; i++) {
-        const neuron = outputLayer.neurons[i];
-        const error = neuron.value - targetOutputs[i];
-        neuron.gradient = 2 * error * neuron.activationDerivative();
+      testError(outputs, additive, power) {
+        let sum = 0;
+        let meanSum = 0;
+        const p = power || 2;
+        for (let i = 0; i < this.outputSize; i++) {
+          const diff = Math.abs(this.getOutputLayer().neurons[i].value - outputs[i]);
+          sum += diff ** p;
+          meanSum += diff;
+        }
+        if (additive) {
+          this.error += sum;
+          this.meanError += meanSum;
+        } else {
+          this.error = sum;
+          this.meanError = meanSum;
+        }
       }
-      for (let l = this.numOfLayers - 2; l >= 0; l--) {
-        const currentLayer = this.layers[l];
-        const nextLayer = this.layers[l + 1];
-        for (let i = 0; i < currentLayer.neurons.length; i++) {
-          const neuron = currentLayer.neurons[i];
-          let sum = 0;
-          for (let j = 0; j < nextLayer.neurons.length; j++) {
-            const nextNeuron = nextLayer.neurons[j];
-            for (let w = 0; w < nextNeuron.weights.length; w++) {
-              const weight = nextNeuron.weights[w];
-              if (weight.to.layer === l && weight.to.index === i) {
-                sum += nextNeuron.gradient * weight.value;
-                weight.gradient += nextNeuron.gradient * neuron.value;
+      // Backpropagation: calculate gradients for all weights and biases
+      backPropogate(targetOutputs, resetGradients = true) {
+        if (targetOutputs.length !== this.outputSize) {
+          throw new Error("Wrong number of target outputs");
+        }
+        if (resetGradients) {
+          for (let l = 1; l < this.numOfLayers; l++) {
+            for (let n = 0; n < this.layers[l].neurons.length; n++) {
+              this.layers[l].neurons[n].gradient = 0;
+              for (let w = 0; w < this.layers[l].neurons[n].weights.length; w++) {
+                this.layers[l].neurons[n].weights[w].gradient = 0;
               }
             }
           }
-          neuron.gradient = sum * neuron.activationDerivative();
+        }
+        const outputLayer = this.layers[this.numOfLayers - 1];
+        for (let i = 0; i < outputLayer.neurons.length; i++) {
+          const neuron = outputLayer.neurons[i];
+          const error = neuron.value - targetOutputs[i];
+          neuron.gradient = 2 * error * neuron.activationDerivative();
+        }
+        for (let l = this.numOfLayers - 2; l >= 0; l--) {
+          const currentLayer = this.layers[l];
+          const nextLayer = this.layers[l + 1];
+          for (let i = 0; i < currentLayer.neurons.length; i++) {
+            const neuron = currentLayer.neurons[i];
+            let sum = 0;
+            for (let j = 0; j < nextLayer.neurons.length; j++) {
+              const nextNeuron = nextLayer.neurons[j];
+              for (let w = 0; w < nextNeuron.weights.length; w++) {
+                const weight = nextNeuron.weights[w];
+                if (weight.to.layer === l && weight.to.index === i) {
+                  sum += nextNeuron.gradient * weight.value;
+                  weight.gradient += nextNeuron.gradient * neuron.value;
+                }
+              }
+            }
+            neuron.gradient = sum * neuron.activationDerivative();
+          }
         }
       }
-    }
-    // Apply gradients to update weights and biases with momentum
-    applyGradients() {
-      for (let l = 1; l < this.numOfLayers; l++) {
-        for (let n = 0; n < this.layers[l].neurons.length; n++) {
-          const neuron = this.layers[l].neurons[n];
-          neuron.biasVelocity = this.momentum * neuron.biasVelocity - this.learningRate * neuron.gradient;
-          neuron.bias += neuron.biasVelocity;
-          if (this.clampBiases) {
-            neuron.bias = Math.max(-1, Math.min(1, neuron.bias));
-          }
-          for (let w = 0; w < neuron.weights.length; w++) {
-            const weight = neuron.weights[w];
-            weight.velocity = this.momentum * weight.velocity - this.learningRate * weight.gradient;
-            weight.value += weight.velocity;
-            if (this.clampWeights) {
-              weight.value = Math.max(-1, Math.min(1, weight.value));
+      // Apply gradients to update weights and biases with momentum
+      applyGradients() {
+        for (let l = 1; l < this.numOfLayers; l++) {
+          for (let n = 0; n < this.layers[l].neurons.length; n++) {
+            const neuron = this.layers[l].neurons[n];
+            neuron.biasVelocity = this.momentum * neuron.biasVelocity - this.learningRate * neuron.gradient;
+            neuron.bias += neuron.biasVelocity;
+            if (this.clampBiases) {
+              neuron.bias = Math.max(-1, Math.min(1, neuron.bias));
+            }
+            for (let w = 0; w < neuron.weights.length; w++) {
+              const weight = neuron.weights[w];
+              weight.velocity = this.momentum * weight.velocity - this.learningRate * weight.gradient;
+              weight.value += weight.velocity;
+              if (this.clampWeights) {
+                weight.value = Math.max(-1, Math.min(1, weight.value));
+              }
             }
           }
         }
       }
-    }
-    // Shrink all weights and biases by a factor (for XGBoost shrinkage/regularization)
-    shrinkWeights(shrinkage) {
-      for (let l = 1; l < this.numOfLayers; l++) {
-        for (let n = 0; n < this.layers[l].neurons.length; n++) {
-          const neuron = this.layers[l].neurons[n];
-          neuron.bias *= shrinkage;
-          for (let w = 0; w < neuron.weights.length; w++) {
-            neuron.weights[w].value *= shrinkage;
+      // Shrink all weights and biases by a factor (for XGBoost shrinkage/regularization)
+      shrinkWeights(shrinkage) {
+        for (let l = 1; l < this.numOfLayers; l++) {
+          for (let n = 0; n < this.layers[l].neurons.length; n++) {
+            const neuron = this.layers[l].neurons[n];
+            neuron.bias *= shrinkage;
+            for (let w = 0; w < neuron.weights.length; w++) {
+              neuron.weights[w].value *= shrinkage;
+            }
           }
         }
       }
-    }
-    // Train on a batch of data using backpropagation
-    trainBatch(inputs, targetOutputs) {
-      if (inputs.length !== targetOutputs.length) {
-        throw new Error("Inputs and target outputs must have same length");
+      // Train on a batch of data using backpropagation
+      trainBatch(inputs, targetOutputs) {
+        if (inputs.length !== targetOutputs.length) {
+          throw new Error("Inputs and target outputs must have same length");
+        }
+        for (let i = 0; i < inputs.length; i++) {
+          this.forward(inputs[i]);
+          this.backPropogate(targetOutputs[i], i === 0);
+        }
+        const batchSize = inputs.length;
+        for (let l = 1; l < this.numOfLayers; l++) {
+          for (let n = 0; n < this.layers[l].neurons.length; n++) {
+            const neuron = this.layers[l].neurons[n];
+            neuron.gradient /= batchSize;
+            for (let w = 0; w < neuron.weights.length; w++) {
+              neuron.weights[w].gradient /= batchSize;
+            }
+          }
+        }
+        this.applyGradients();
       }
-      for (let i = 0; i < inputs.length; i++) {
-        this.run(inputs[i]);
-        this.backPropogate(targetOutputs[i], i === 0);
+      getNodeValue(np) {
+        return this.layers[np.layer].neurons[np.index].value;
       }
-      const batchSize = inputs.length;
-      for (let l = 1; l < this.numOfLayers; l++) {
-        for (let n = 0; n < this.layers[l].neurons.length; n++) {
-          const neuron = this.layers[l].neurons[n];
-          neuron.gradient /= batchSize;
-          for (let w = 0; w < neuron.weights.length; w++) {
-            neuron.weights[w].gradient /= batchSize;
+      getInputLayer() {
+        return this.layers[0];
+      }
+      getOutputLayer() {
+        return this.layers[this.numOfLayers - 1];
+      }
+      clone() {
+        let nn = new NeuralNetwork2(this.inputSize, this.hiddenLayerSizes, this.outputSize, this.activationFunction, this.outputActivationFunction);
+        nn.startRandomBias = this.startRandomBias;
+        nn.startRandomWeights = this.startRandomWeights;
+        nn.clampBiases = this.clampBiases;
+        nn.clampWeights = this.clampWeights;
+        nn.changeWeightAlpha = this.changeWeightAlpha;
+        nn.linePower = this.linePower;
+        nn.error = this.error;
+        nn.meanError = this.meanError;
+        for (let l = 0; l < this.layers.length; l++) {
+          const sourceLayer = this.layers[l];
+          const targetLayer = nn.layers[l];
+          for (let n = 0; n < sourceLayer.neurons.length; n++) {
+            const sourceNeuron = sourceLayer.neurons[n];
+            const targetNeuron = targetLayer.neurons[n];
+            targetNeuron.value = sourceNeuron.value;
+            targetNeuron.bias = sourceNeuron.bias;
+            targetNeuron.biasVelocity = sourceNeuron.biasVelocity;
+            for (let w = 0; w < sourceNeuron.weights.length; w++) {
+              targetNeuron.weights[w].value = sourceNeuron.weights[w].value;
+              targetNeuron.weights[w].velocity = sourceNeuron.weights[w].velocity;
+            }
+          }
+        }
+        return nn;
+      }
+      // Seed format shared with the C++ version:
+      // NNSEED1|activation|outputActivation|layerSizes(csv)|params(csv)
+      // params: for each layer after the input, per neuron: bias then weights
+      toSeed() {
+        const sizes = [this.inputSize, ...this.hiddenLayerSizes, this.outputSize];
+        const params = [];
+        for (let l = 1; l < this.numOfLayers; l++) {
+          for (const neuron of this.layers[l].neurons) {
+            params.push(neuron.bias);
+            for (const w of neuron.weights) {
+              params.push(w.value);
+            }
+          }
+        }
+        return `NNSEED1|${this.activationFunction}|${this.outputActivationFunction}|${sizes.join(",")}|${params.join(",")}`;
+      }
+      static fromSeed(seed) {
+        return new NeuralNetwork2(seed);
+      }
+      initLayers() {
+        this.initNextLayer(this.inputSize, false, this.activationFunction);
+        for (let i = 0; i < this.hiddenLayerSizes.length; i++) {
+          this.initNextLayer(this.hiddenLayerSizes[i], this.startRandomBias, this.activationFunction);
+        }
+        this.initNextLayer(this.outputSize, this.startRandomBias, this.outputActivationFunction);
+      }
+      initNextLayer(numOfNeurons, randomBias, activationFunction2) {
+        const layerNeurons = [];
+        for (let j = 0; j < numOfNeurons; j++) {
+          const neuronWeights = this.initWeights();
+          layerNeurons.push(new Neuron(neuronWeights, randomBias ? (Math.random() * 2 - 1) * 0.5 : 0, activationFunction2));
+        }
+        this.layers.push(new Layer(layerNeurons));
+      }
+      initWeights() {
+        if (this.layers.length == 0) {
+          return [];
+        }
+        let w = [];
+        let lastLayerIndex = this.layers.length - 1;
+        const fanIn = this.layers[lastLayerIndex].neurons.length;
+        const scale = Math.min(1, Math.sqrt(6 / fanIn));
+        for (let i = 0; i < fanIn; i++) {
+          w.push(new Weight(this.startRandomWeights ? (Math.random() * 2 - 1) * scale : 0, new NeuronPosition(lastLayerIndex, i)));
+        }
+        return w;
+      }
+      write() {
+        console.log(this.layers);
+        for (let i = 0; i < this.layers.length; i++) {
+          let str = "";
+          for (let j = 0; j < this.layers[i].neurons.length; j++) {
+            let neuron = this.layers[i].neurons[j];
+            str += neuron.bias;
+            str += " ";
           }
         }
       }
-      this.applyGradients();
-    }
-    getNodeValue(np) {
-      return this.layers[np.layer].neurons[np.index].value;
-    }
-    getInputLayer() {
-      return this.layers[0];
-    }
-    getOutputLayer() {
-      return this.layers[this.numOfLayers - 1];
-    }
-    clone() {
-      let nn = new _NeuralNetwork(this.inputSize, this.hiddenLayerSizes, this.outputSize, this.activationFunction, this.outputActivationFunction);
-      nn.startRandomBias = this.startRandomBias;
-      nn.startRandomWeights = this.startRandomWeights;
-      nn.clampBiases = this.clampBiases;
-      nn.clampWeights = this.clampWeights;
-      nn.changeWeightAlpha = this.changeWeightAlpha;
-      nn.linePower = this.linePower;
-      nn.error = this.error;
-      nn.meanError = this.meanError;
-      for (let l = 0; l < this.layers.length; l++) {
-        const sourceLayer = this.layers[l];
-        const targetLayer = nn.layers[l];
-        for (let n = 0; n < sourceLayer.neurons.length; n++) {
-          const sourceNeuron = sourceLayer.neurons[n];
-          const targetNeuron = targetLayer.neurons[n];
-          targetNeuron.value = sourceNeuron.value;
-          targetNeuron.bias = sourceNeuron.bias;
-          targetNeuron.biasVelocity = sourceNeuron.biasVelocity;
-          for (let w = 0; w < sourceNeuron.weights.length; w++) {
-            targetNeuron.weights[w].value = sourceNeuron.weights[w].value;
-            targetNeuron.weights[w].velocity = sourceNeuron.weights[w].velocity;
+      draw(ctx2, left, top, width, height, displayErrorDigits, displayMeanError) {
+        let spaceX = width / (this.numOfLayers + 1);
+        let lastYs = [];
+        const bottomPadding = (displayErrorDigits ? 15 : 0) + (displayMeanError ? 15 : 0);
+        for (let i = 0; i < this.numOfLayers; i++) {
+          let x = (i + 1) * spaceX + left;
+          let lastX = i * spaceX + left;
+          let neurons = this.layers[i].neurons;
+          let spaceY = (height - bottomPadding) / (neurons.length + 1);
+          let newYs = [];
+          for (let j = 0; j < neurons.length; j++) {
+            let neuron = neurons[j];
+            let y = (j + 1) * spaceY + top;
+            newYs.push(y);
+            for (let w = 0; w < lastYs.length; w++) {
+              ctx2.save();
+              ctx2.strokeStyle = this.numToColorBlack(neuron.weights[w].value);
+              ctx2.lineWidth = 2;
+              if (this.changeWeightAlpha)
+                ctx2.globalAlpha = Math.abs(neuron.weights[w].value) ** this.linePower;
+              ctx2.beginPath();
+              ctx2.moveTo(x, y);
+              ctx2.lineTo(lastX, lastYs[w]);
+              ctx2.stroke();
+              ctx2.restore();
+            }
           }
+          lastYs = newYs;
         }
-      }
-      return nn;
-    }
-    // Seed format shared with the C++ version:
-    // NNSEED1|activation|outputActivation|layerSizes(csv)|params(csv)
-    // params: for each layer after the input, per neuron: bias then weights
-    toSeed() {
-      const sizes = [this.inputSize, ...this.hiddenLayerSizes, this.outputSize];
-      const params = [];
-      for (let l = 1; l < this.numOfLayers; l++) {
-        for (const neuron of this.layers[l].neurons) {
-          params.push(neuron.bias);
-          for (const w of neuron.weights) {
-            params.push(w.value);
-          }
-        }
-      }
-      return `NNSEED1|${this.activationFunction}|${this.outputActivationFunction}|${sizes.join(",")}|${params.join(",")}`;
-    }
-    static fromSeed(seed) {
-      const parts = seed.trim().split("|");
-      if (parts.length !== 5 || parts[0] !== "NNSEED1") {
-        throw new Error("Invalid seed: expected NNSEED1|act|outAct|sizes|params");
-      }
-      const activation = parts[1];
-      const outputActivation = parts[2];
-      const sizes = parts[3].split(",").map(Number);
-      const params = parts[4].split(",").map(Number);
-      const nn = new _NeuralNetwork(sizes[0], sizes.slice(1, -1), sizes[sizes.length - 1], activation, outputActivation);
-      let p = 0;
-      for (let l = 1; l < nn.numOfLayers; l++) {
-        for (const neuron of nn.layers[l].neurons) {
-          neuron.bias = params[p++];
-          for (const w of neuron.weights) {
-            w.value = params[p++];
-          }
-        }
-      }
-      if (p !== params.length || params.some(isNaN)) {
-        throw new Error("Invalid seed: wrong number of parameters");
-      }
-      return nn;
-    }
-    initLayers() {
-      this.initNextLayer(this.inputSize, false, this.activationFunction);
-      for (let i = 0; i < this.hiddenLayerSizes.length; i++) {
-        this.initNextLayer(this.hiddenLayerSizes[i], this.startRandomBias, this.activationFunction);
-      }
-      this.initNextLayer(this.outputSize, this.startRandomBias, this.outputActivationFunction);
-    }
-    initNextLayer(numOfNeurons, randomBias, activationFunction2) {
-      const layerNeurons = [];
-      for (let j = 0; j < numOfNeurons; j++) {
-        const neuronWeights = this.initWeights();
-        layerNeurons.push(new Neuron(neuronWeights, randomBias ? (Math.random() * 2 - 1) * 0.5 : 0, activationFunction2));
-      }
-      this.layers.push(new Layer(layerNeurons));
-    }
-    initWeights() {
-      if (this.layers.length == 0) {
-        return [];
-      }
-      let w = [];
-      let lastLayerIndex = this.layers.length - 1;
-      const fanIn = this.layers[lastLayerIndex].neurons.length;
-      const scale = Math.min(1, Math.sqrt(6 / fanIn));
-      for (let i = 0; i < fanIn; i++) {
-        w.push(new Weight(this.startRandomWeights ? (Math.random() * 2 - 1) * scale : 0, new NeuronPosition(lastLayerIndex, i)));
-      }
-      return w;
-    }
-    write() {
-      console.log(this.layers);
-      for (let i = 0; i < this.layers.length; i++) {
-        let str = "";
-        for (let j = 0; j < this.layers[i].neurons.length; j++) {
-          let neuron = this.layers[i].neurons[j];
-          str += neuron.bias;
-          str += " ";
-        }
-      }
-    }
-    draw(ctx2, left, top, width, height, displayErrorDigits, displayMeanError) {
-      let spaceX = width / (this.numOfLayers + 1);
-      let lastYs = [];
-      const bottomPadding = (displayErrorDigits ? 15 : 0) + (displayMeanError ? 15 : 0);
-      for (let i = 0; i < this.numOfLayers; i++) {
-        let x = (i + 1) * spaceX + left;
-        let lastX = i * spaceX + left;
-        let neurons = this.layers[i].neurons;
-        let spaceY = (height - bottomPadding) / (neurons.length + 1);
-        let newYs = [];
-        for (let j = 0; j < neurons.length; j++) {
-          let neuron = neurons[j];
-          let y = (j + 1) * spaceY + top;
-          newYs.push(y);
-          for (let w = 0; w < lastYs.length; w++) {
+        for (let i = 0; i < this.numOfLayers; i++) {
+          let neurons = this.layers[i].neurons;
+          let spaceY = (height - bottomPadding) / (neurons.length + 1);
+          let x = (i + 1) * spaceX + left;
+          for (let j = 0; j < neurons.length; j++) {
+            let neuron = neurons[j];
+            let y = (j + 1) * spaceY + top;
+            let r1 = Math.min(spaceX, spaceY) / 2.1;
             ctx2.save();
-            ctx2.strokeStyle = this.numToColorBlack(neuron.weights[w].value);
-            ctx2.lineWidth = 2;
-            if (this.changeWeightAlpha)
-              ctx2.globalAlpha = Math.abs(neuron.weights[w].value) ** this.linePower;
-            ctx2.beginPath();
-            ctx2.moveTo(x, y);
-            ctx2.lineTo(lastX, lastYs[w]);
-            ctx2.stroke();
+            ctx2.fillStyle = this.numToColorBlack(neuron.bias);
+            drawCircle(ctx2, { x, y }, r1);
             ctx2.restore();
+            let r2 = Math.min(spaceX, spaceY) / 2.3;
+            ctx2.save();
+            ctx2.fillStyle = this.numToColorWhite(neuron.value);
+            drawCircle(ctx2, { x, y }, r2);
+            ctx2.restore();
+            ctx2.save();
+            let val = Math.floor(neuron.value * 1e3) / 1e3;
+            let textStr = val.toString();
+            let drawn = false;
+            ctx2.font = "12px sans-serif";
+            ctx2.textBaseline = "middle";
+            ctx2.fillStyle = "#000000";
+            while (textStr.length > 0 && textStr != "-" && !drawn) {
+              if (textStr.at(-1) == ".") {
+                textStr = textStr.slice(0, -1);
+                continue;
+              }
+              let measure = ctx2.measureText(textStr);
+              let w = measure.width;
+              if (w >= r2 * 1.8) {
+                textStr = textStr.slice(0, -1);
+                continue;
+              }
+              drawn = true;
+              ctx2.fillText(textStr, x - w / 2, y);
+              ctx2.restore();
+            }
           }
         }
-        lastYs = newYs;
-      }
-      for (let i = 0; i < this.numOfLayers; i++) {
-        let neurons = this.layers[i].neurons;
-        let spaceY = (height - bottomPadding) / (neurons.length + 1);
-        let x = (i + 1) * spaceX + left;
-        for (let j = 0; j < neurons.length; j++) {
-          let neuron = neurons[j];
-          let y = (j + 1) * spaceY + top;
-          let r1 = Math.min(spaceX, spaceY) / 2.1;
-          ctx2.save();
-          ctx2.fillStyle = this.numToColorBlack(neuron.bias);
-          drawCircle(ctx2, { x, y }, r1);
-          ctx2.restore();
-          let r2 = Math.min(spaceX, spaceY) / 2.3;
-          ctx2.save();
-          ctx2.fillStyle = this.numToColorWhite(neuron.value);
-          drawCircle(ctx2, { x, y }, r2);
-          ctx2.restore();
-          ctx2.save();
-          let val = Math.floor(neuron.value * 1e3) / 1e3;
-          let textStr = val.toString();
-          let drawn = false;
+        if (displayErrorDigits) {
           ctx2.font = "12px sans-serif";
-          ctx2.textBaseline = "middle";
           ctx2.fillStyle = "#000000";
+          let textStr = "\u03F5 RMSE: " + (Math.floor(this.error * 10 ** displayErrorDigits) / 10 ** displayErrorDigits).toString();
+          let drawn = false;
           while (textStr.length > 0 && textStr != "-" && !drawn) {
-            if (textStr.at(-1) == ".") {
-              textStr = textStr.slice(0, -1);
-              continue;
-            }
             let measure = ctx2.measureText(textStr);
             let w = measure.width;
-            if (w >= r2 * 1.8) {
+            if (w >= width) {
               textStr = textStr.slice(0, -1);
               continue;
             }
             drawn = true;
-            ctx2.fillText(textStr, x - w / 2, y);
+            const yOffset = displayMeanError ? 20 : 10;
+            ctx2.fillText(textStr, left + width / 2 - w / 2, top + height - yOffset);
+            ctx2.restore();
+          }
+        }
+        if (displayMeanError) {
+          ctx2.font = "12px sans-serif";
+          ctx2.fillStyle = "#000000";
+          let textStr = "\u03BC MAE: " + (Math.floor(this.meanError * 10 ** displayErrorDigits) / 10 ** displayErrorDigits).toString();
+          let drawn = false;
+          while (textStr.length > 0 && textStr != "-" && !drawn) {
+            let measure = ctx2.measureText(textStr);
+            let w = measure.width;
+            if (w >= width) {
+              textStr = textStr.slice(0, -1);
+              continue;
+            }
+            drawn = true;
+            ctx2.fillText(textStr, left + width / 2 - w / 2, top + height - 10);
             ctx2.restore();
           }
         }
       }
-      if (displayErrorDigits) {
-        ctx2.font = "12px sans-serif";
-        ctx2.fillStyle = "#000000";
-        let textStr = "\u03F5 RMSE: " + (Math.floor(this.error * 10 ** displayErrorDigits) / 10 ** displayErrorDigits).toString();
-        let drawn = false;
-        while (textStr.length > 0 && textStr != "-" && !drawn) {
-          let measure = ctx2.measureText(textStr);
-          let w = measure.width;
-          if (w >= width) {
-            textStr = textStr.slice(0, -1);
-            continue;
-          }
-          drawn = true;
-          const yOffset = displayMeanError ? 20 : 10;
-          ctx2.fillText(textStr, left + width / 2 - w / 2, top + height - yOffset);
-          ctx2.restore();
-        }
-      }
-      if (displayMeanError) {
-        ctx2.font = "12px sans-serif";
-        ctx2.fillStyle = "#000000";
-        let textStr = "\u03BC MAE: " + (Math.floor(this.meanError * 10 ** displayErrorDigits) / 10 ** displayErrorDigits).toString();
-        let drawn = false;
-        while (textStr.length > 0 && textStr != "-" && !drawn) {
-          let measure = ctx2.measureText(textStr);
-          let w = measure.width;
-          if (w >= width) {
-            textStr = textStr.slice(0, -1);
-            continue;
-          }
-          drawn = true;
-          ctx2.fillText(textStr, left + width / 2 - w / 2, top + height - 10);
-          ctx2.restore();
-        }
-      }
-    }
-    displayGrid2Input1Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, getCellValue, getColorValue) {
-      const headerOffset = showHeaders ? 1 : 0;
-      let spaceX = width / (columns + headerOffset);
-      let spaceY = height / (rows + headerOffset);
-      ctx2.save();
-      ctx2.font = `${Math.min(spaceX, spaceY) * 0.3}px sans-serif`;
-      ctx2.textAlign = "center";
-      ctx2.textBaseline = "middle";
-      ctx2.fillStyle = "#e0e0e0";
-      ctx2.fillRect(left, top, width, height);
-      if (showHeaders) {
-        for (let i = 0; i < columns; i++) {
-          let x = left + (i + 1) * spaceX;
-          let y = top;
-          let headerValue = axis1low + i * (axis1high - axis1low) / (columns - 1);
-          ctx2.fillStyle = "#000000";
-          let text = headerValue.toFixed(2);
-          if (ctx2.measureText(text).width > spaceX * 0.9) {
-            text = headerValue.toFixed(1);
-          }
-          if (ctx2.measureText(text).width > spaceX * 0.9) {
-            text = headerValue.toFixed(0);
-          }
-          ctx2.fillText(text, x + spaceX / 2, y + spaceY / 2);
-        }
-        for (let j = 0; j < rows; j++) {
-          let x = left;
-          let y = top + (j + 1) * spaceY;
-          let headerValue = axis2low + j * (axis2high - axis2low) / (rows - 1);
-          ctx2.fillStyle = "#e0e0e0";
-          ctx2.fillRect(x, y, spaceX, spaceY);
-          ctx2.fillStyle = "#000000";
-          let text = headerValue.toFixed(2);
-          if (ctx2.measureText(text).width > spaceX * 0.9) {
-            text = headerValue.toFixed(1);
-          }
-          if (ctx2.measureText(text).width > spaceX * 0.9) {
-            text = headerValue.toFixed(0);
-          }
-          ctx2.fillText(text, x + spaceX / 2, y + spaceY / 2);
-        }
-        ctx2.fillStyle = "#c0c0c0";
-        ctx2.fillRect(left, top, spaceX, spaceY);
-      }
-      for (let i = 0; i < columns; i++) {
-        for (let j = 0; j < rows; j++) {
-          let x = left + (i + headerOffset) * spaceX;
-          let y = top + (j + headerOffset) * spaceY;
-          let input12 = axis1low + i * (axis1high - axis1low) / (columns - 1);
-          let input22 = axis2low + j * (axis2high - axis2low) / (rows - 1);
-          let cellValue = getCellValue(input12, input22);
-          ctx2.fillStyle = this.numToColorWhite(getColorValue(cellValue));
-          ctx2.fillRect(x, y, spaceX + (showText ? -1 : 1), spaceY + (showText ? -1 : 1));
-          if (showText) {
+      displayGrid2Input1Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, getCellValue, getColorValue) {
+        const headerOffset = showHeaders ? 1 : 0;
+        let spaceX = width / (columns + headerOffset);
+        let spaceY = height / (rows + headerOffset);
+        ctx2.save();
+        ctx2.font = `${Math.min(spaceX, spaceY) * 0.3}px sans-serif`;
+        ctx2.textAlign = "center";
+        ctx2.textBaseline = "middle";
+        ctx2.fillStyle = "#e0e0e0";
+        ctx2.fillRect(left, top, width, height);
+        if (showHeaders) {
+          for (let i = 0; i < columns; i++) {
+            let x = left + (i + 1) * spaceX;
+            let y = top;
+            let headerValue = axis1low + i * (axis1high - axis1low) / (columns - 1);
             ctx2.fillStyle = "#000000";
-            let text = cellValue.toFixed(decimals);
-            let textWidth = ctx2.measureText(text).width;
-            if (textWidth > spaceX * 0.9) {
-              text = cellValue.toFixed(Math.max(0, decimals - 1));
-              textWidth = ctx2.measureText(text).width;
-              if (textWidth > spaceX * 0.9) {
-                text = cellValue.toFixed(0);
-              }
+            let text = headerValue.toFixed(2);
+            if (ctx2.measureText(text).width > spaceX * 0.9) {
+              text = headerValue.toFixed(1);
+            }
+            if (ctx2.measureText(text).width > spaceX * 0.9) {
+              text = headerValue.toFixed(0);
             }
             ctx2.fillText(text, x + spaceX / 2, y + spaceY / 2);
           }
-        }
-      }
-      ctx2.restore();
-    }
-    display2Input1OutputError(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, errorRange, rows, columns, decimals, showText, showHeaders, test2) {
-      this.displayGrid2Input1Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, (input12, input22) => {
-        let val = this.run([input12, input22]);
-        return val.neurons[0].value - test2([input12, input22])[0];
-      }, (cellValue) => cellValue * errorRange);
-    }
-    display2Input1OutputTest(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, ouputMiddle, outputRange, rows, columns, decimals, showText, showHeaders, test2) {
-      this.displayGrid2Input1Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, (input12, input22) => test2([input12, input22])[0], (cellValue) => cellValue * outputRange - ouputMiddle);
-    }
-    display2Input1Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, ouputMiddle, outputRange, rows, columns, decimals, showText, showHeaders) {
-      this.displayGrid2Input1Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, (input12, input22) => this.run([input12, input22]).neurons[0].value, (cellValue) => cellValue * outputRange - ouputMiddle);
-    }
-    numToColorBlack(num) {
-      if (num >= 0) {
-        return "rgb(0, " + Math.tanh(num) * 255 + ",0)";
-      }
-      if (num < 0) {
-        return "rgb(" + -Math.tanh(num) * 255 + ", 0 ,0)";
-      }
-      return "";
-    }
-    numToColorWhite(num) {
-      if (num >= 0) {
-        return "rgb(" + (1 - Math.tanh(num)) * 255 + ", 255," + (1 - Math.tanh(num)) * 255 + ")";
-      }
-      if (num < 0) {
-        return "rgb(255, " + (1 + Math.tanh(num)) * 255 + "," + (1 + Math.tanh(num)) * 255 + ")";
-      }
-      return "";
-    }
-    interpolateColor(color12, color22, weight) {
-      const clampedWeight = Math.max(0, Math.min(1, weight));
-      const r = Math.round(color12.r * clampedWeight + color22.r * (1 - clampedWeight));
-      const g = Math.round(color12.g * clampedWeight + color22.g * (1 - clampedWeight));
-      const b = Math.round(color12.b * clampedWeight + color22.b * (1 - clampedWeight));
-      return `rgb(${r}, ${g}, ${b})`;
-    }
-    interpolateColorPublic(color12, color22, weight) {
-      return this.interpolateColor(color12, color22, weight);
-    }
-    displayGrid2Input2Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22, getOutputs) {
-      const headerOffset = showHeaders ? 1 : 0;
-      let spaceX = width / (columns + headerOffset);
-      let spaceY = height / (rows + headerOffset);
-      ctx2.save();
-      ctx2.font = `${Math.min(spaceX, spaceY) * 0.3}px sans-serif`;
-      ctx2.textAlign = "center";
-      ctx2.textBaseline = "middle";
-      ctx2.fillStyle = "#e0e0e0";
-      ctx2.fillRect(left, top, width, height);
-      if (showHeaders) {
-        for (let i = 0; i < columns; i++) {
-          let x = left + (i + 1) * spaceX;
-          let y = top;
-          let headerValue = axis1low + i * (axis1high - axis1low) / (columns - 1);
-          ctx2.fillStyle = "#000000";
-          let text = headerValue.toFixed(2);
-          if (ctx2.measureText(text).width > spaceX * 0.9) {
-            text = headerValue.toFixed(1);
-          }
-          if (ctx2.measureText(text).width > spaceX * 0.9) {
-            text = headerValue.toFixed(0);
-          }
-          ctx2.fillText(text, x + spaceX / 2, y + spaceY / 2);
-        }
-        for (let j = 0; j < rows; j++) {
-          let x = left;
-          let y = top + (j + 1) * spaceY;
-          let headerValue = axis2low + j * (axis2high - axis2low) / (rows - 1);
-          ctx2.fillStyle = "#e0e0e0";
-          ctx2.fillRect(x, y, spaceX, spaceY);
-          ctx2.fillStyle = "#000000";
-          let text = headerValue.toFixed(2);
-          if (ctx2.measureText(text).width > spaceX * 0.9) {
-            text = headerValue.toFixed(1);
-          }
-          if (ctx2.measureText(text).width > spaceX * 0.9) {
-            text = headerValue.toFixed(0);
-          }
-          ctx2.fillText(text, x + spaceX / 2, y + spaceY / 2);
-        }
-        ctx2.fillStyle = "#c0c0c0";
-        ctx2.fillRect(left, top, spaceX, spaceY);
-      }
-      for (let i = 0; i < columns; i++) {
-        for (let j = 0; j < rows; j++) {
-          let x = left + (i + headerOffset) * spaceX;
-          let y = top + (j + headerOffset) * spaceY;
-          let input12 = axis1low + i * (axis1high - axis1low) / (columns - 1);
-          let input22 = axis2low + j * (axis2high - axis2low) / (rows - 1);
-          let outputs = getOutputs(input12, input22);
-          ctx2.fillStyle = this.interpolateColor(color12, color22, outputs[0]);
-          ctx2.fillRect(x, y, spaceX + (showText ? -1 : 1), spaceY + (showText ? -1 : 1));
-          if (showText) {
+          for (let j = 0; j < rows; j++) {
+            let x = left;
+            let y = top + (j + 1) * spaceY;
+            let headerValue = axis2low + j * (axis2high - axis2low) / (rows - 1);
+            ctx2.fillStyle = "#e0e0e0";
+            ctx2.fillRect(x, y, spaceX, spaceY);
             ctx2.fillStyle = "#000000";
-            let text = outputs[0].toFixed(decimals) + "," + outputs[1].toFixed(decimals);
-            let textWidth = ctx2.measureText(text).width;
-            let shrink = 0;
-            while (textWidth > spaceX * 0.9 && shrink < decimals) {
-              text = outputs[0].toFixed(decimals - shrink) + "," + outputs[1].toFixed(decimals - shrink);
-              textWidth = ctx2.measureText(text).width;
-              if (textWidth > spaceX * 0.9) {
-                text = outputs[0].toFixed(decimals - shrink);
-              }
-              shrink++;
+            let text = headerValue.toFixed(2);
+            if (ctx2.measureText(text).width > spaceX * 0.9) {
+              text = headerValue.toFixed(1);
+            }
+            if (ctx2.measureText(text).width > spaceX * 0.9) {
+              text = headerValue.toFixed(0);
             }
             ctx2.fillText(text, x + spaceX / 2, y + spaceY / 2);
           }
+          ctx2.fillStyle = "#c0c0c0";
+          ctx2.fillRect(left, top, spaceX, spaceY);
+        }
+        for (let i = 0; i < columns; i++) {
+          for (let j = 0; j < rows; j++) {
+            let x = left + (i + headerOffset) * spaceX;
+            let y = top + (j + headerOffset) * spaceY;
+            let input12 = axis1low + i * (axis1high - axis1low) / (columns - 1);
+            let input22 = axis2low + j * (axis2high - axis2low) / (rows - 1);
+            let cellValue = getCellValue(input12, input22);
+            ctx2.fillStyle = this.numToColorWhite(getColorValue(cellValue));
+            ctx2.fillRect(x, y, spaceX + (showText ? -1 : 1), spaceY + (showText ? -1 : 1));
+            if (showText) {
+              ctx2.fillStyle = "#000000";
+              let text = cellValue.toFixed(decimals);
+              let textWidth = ctx2.measureText(text).width;
+              if (textWidth > spaceX * 0.9) {
+                text = cellValue.toFixed(Math.max(0, decimals - 1));
+                textWidth = ctx2.measureText(text).width;
+                if (textWidth > spaceX * 0.9) {
+                  text = cellValue.toFixed(0);
+                }
+              }
+              ctx2.fillText(text, x + spaceX / 2, y + spaceY / 2);
+            }
+          }
+        }
+        ctx2.restore();
+      }
+      display2Input1OutputError(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, errorRange, rows, columns, decimals, showText, showHeaders, test2) {
+        this.displayGrid2Input1Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, (input12, input22) => {
+          let val = this.run([input12, input22]);
+          return val[0] - test2([input12, input22])[0];
+        }, (cellValue) => cellValue * errorRange);
+      }
+      display2Input1OutputTest(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, ouputMiddle, outputRange, rows, columns, decimals, showText, showHeaders, test2) {
+        this.displayGrid2Input1Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, (input12, input22) => test2([input12, input22])[0], (cellValue) => cellValue * outputRange - ouputMiddle);
+      }
+      display2Input1Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, ouputMiddle, outputRange, rows, columns, decimals, showText, showHeaders) {
+        this.displayGrid2Input1Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, (input12, input22) => this.run([input12, input22])[0], (cellValue) => cellValue * outputRange - ouputMiddle);
+      }
+      numToColorBlack(num) {
+        if (num >= 0) {
+          return "rgb(0, " + Math.tanh(num) * 255 + ",0)";
+        }
+        if (num < 0) {
+          return "rgb(" + -Math.tanh(num) * 255 + ", 0 ,0)";
+        }
+        return "";
+      }
+      numToColorWhite(num) {
+        if (num >= 0) {
+          return "rgb(" + (1 - Math.tanh(num)) * 255 + ", 255," + (1 - Math.tanh(num)) * 255 + ")";
+        }
+        if (num < 0) {
+          return "rgb(255, " + (1 + Math.tanh(num)) * 255 + "," + (1 + Math.tanh(num)) * 255 + ")";
+        }
+        return "";
+      }
+      interpolateColor(color12, color22, weight) {
+        const clampedWeight = Math.max(0, Math.min(1, weight));
+        const r = Math.round(color12.r * clampedWeight + color22.r * (1 - clampedWeight));
+        const g = Math.round(color12.g * clampedWeight + color22.g * (1 - clampedWeight));
+        const b = Math.round(color12.b * clampedWeight + color22.b * (1 - clampedWeight));
+        return `rgb(${r}, ${g}, ${b})`;
+      }
+      interpolateColorPublic(color12, color22, weight) {
+        return this.interpolateColor(color12, color22, weight);
+      }
+      displayGrid2Input2Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22, getOutputs) {
+        const headerOffset = showHeaders ? 1 : 0;
+        let spaceX = width / (columns + headerOffset);
+        let spaceY = height / (rows + headerOffset);
+        ctx2.save();
+        ctx2.font = `${Math.min(spaceX, spaceY) * 0.3}px sans-serif`;
+        ctx2.textAlign = "center";
+        ctx2.textBaseline = "middle";
+        ctx2.fillStyle = "#e0e0e0";
+        ctx2.fillRect(left, top, width, height);
+        if (showHeaders) {
+          for (let i = 0; i < columns; i++) {
+            let x = left + (i + 1) * spaceX;
+            let y = top;
+            let headerValue = axis1low + i * (axis1high - axis1low) / (columns - 1);
+            ctx2.fillStyle = "#000000";
+            let text = headerValue.toFixed(2);
+            if (ctx2.measureText(text).width > spaceX * 0.9) {
+              text = headerValue.toFixed(1);
+            }
+            if (ctx2.measureText(text).width > spaceX * 0.9) {
+              text = headerValue.toFixed(0);
+            }
+            ctx2.fillText(text, x + spaceX / 2, y + spaceY / 2);
+          }
+          for (let j = 0; j < rows; j++) {
+            let x = left;
+            let y = top + (j + 1) * spaceY;
+            let headerValue = axis2low + j * (axis2high - axis2low) / (rows - 1);
+            ctx2.fillStyle = "#e0e0e0";
+            ctx2.fillRect(x, y, spaceX, spaceY);
+            ctx2.fillStyle = "#000000";
+            let text = headerValue.toFixed(2);
+            if (ctx2.measureText(text).width > spaceX * 0.9) {
+              text = headerValue.toFixed(1);
+            }
+            if (ctx2.measureText(text).width > spaceX * 0.9) {
+              text = headerValue.toFixed(0);
+            }
+            ctx2.fillText(text, x + spaceX / 2, y + spaceY / 2);
+          }
+          ctx2.fillStyle = "#c0c0c0";
+          ctx2.fillRect(left, top, spaceX, spaceY);
+        }
+        for (let i = 0; i < columns; i++) {
+          for (let j = 0; j < rows; j++) {
+            let x = left + (i + headerOffset) * spaceX;
+            let y = top + (j + headerOffset) * spaceY;
+            let input12 = axis1low + i * (axis1high - axis1low) / (columns - 1);
+            let input22 = axis2low + j * (axis2high - axis2low) / (rows - 1);
+            let outputs = getOutputs(input12, input22);
+            ctx2.fillStyle = this.interpolateColor(color12, color22, outputs[0]);
+            ctx2.fillRect(x, y, spaceX + (showText ? -1 : 1), spaceY + (showText ? -1 : 1));
+            if (showText) {
+              ctx2.fillStyle = "#000000";
+              let text = outputs[0].toFixed(decimals) + "," + outputs[1].toFixed(decimals);
+              let textWidth = ctx2.measureText(text).width;
+              let shrink = 0;
+              while (textWidth > spaceX * 0.9 && shrink < decimals) {
+                text = outputs[0].toFixed(decimals - shrink) + "," + outputs[1].toFixed(decimals - shrink);
+                textWidth = ctx2.measureText(text).width;
+                if (textWidth > spaceX * 0.9) {
+                  text = outputs[0].toFixed(decimals - shrink);
+                }
+                shrink++;
+              }
+              ctx2.fillText(text, x + spaceX / 2, y + spaceY / 2);
+            }
+          }
+        }
+        ctx2.restore();
+      }
+      display2Input2Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22) {
+        this.displayGrid2Input2Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22, (input12, input22) => {
+          let result = this.run([input12, input22]);
+          return [result[0], result[1]];
+        });
+      }
+      display2Input2OutputTest(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22, test2) {
+        this.displayGrid2Input2Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22, (input12, input22) => test2([input12, input22]));
+      }
+      display2Input2OutputError(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22, test2) {
+        const errorColor1 = { r: 255, g: 255, b: 255 };
+        const errorColor2 = { r: 255, g: 0, b: 0 };
+        this.displayGrid2Input2Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, errorColor1, errorColor2, (input12, input22) => {
+          let nnOutput = this.run([input12, input22]);
+          let testOutput = test2([input12, input22]);
+          let error0 = Math.abs(nnOutput[0] - testOutput[0]);
+          let error1 = Math.abs(nnOutput[1] - testOutput[1]);
+          let totalError = (error0 + error1) / 2;
+          return [totalError, 0];
+        });
+      }
+    }
+    RiverML4.NeuralNetwork = NeuralNetwork2;
+    class Layer {
+      neurons;
+      constructor(neurons) {
+        this.neurons = neurons;
+      }
+    }
+    class Neuron {
+      value;
+      weights;
+      bias;
+      activationFunction;
+      // For backpropagation
+      gradient = 0;
+      // Gradient of the loss with respect to this neuron's output
+      preActivation = 0;
+      // Value before activation function
+      biasVelocity = 0;
+      // Momentum for bias
+      constructor(weights, bias, activationFunction2) {
+        this.value = 0;
+        this.weights = weights;
+        this.bias = bias;
+        this.activationFunction = activationFunction2;
+      }
+      activate() {
+        this.preActivation = this.value;
+        switch (this.activationFunction) {
+          case "relu":
+            this.value = this.value <= 0 ? 0 : this.value;
+            break;
+          case "sigmoid":
+            this.value = 1 / (1 + Math.pow(Math.E, -this.value));
+            break;
+          case "tanh":
+            this.value = Math.tanh(this.value);
+            break;
         }
       }
-      ctx2.restore();
-    }
-    display2Input2Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22) {
-      this.displayGrid2Input2Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22, (input12, input22) => {
-        let result = this.run([input12, input22]);
-        return [result.neurons[0].value, result.neurons[1].value];
-      });
-    }
-    display2Input2OutputTest(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22, test2) {
-      this.displayGrid2Input2Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22, (input12, input22) => test2([input12, input22]));
-    }
-    display2Input2OutputError(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color12, color22, test2) {
-      const errorColor1 = { r: 255, g: 255, b: 255 };
-      const errorColor2 = { r: 255, g: 0, b: 0 };
-      this.displayGrid2Input2Output(ctx2, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, errorColor1, errorColor2, (input12, input22) => {
-        let nnOutput = this.run([input12, input22]);
-        let testOutput = test2([input12, input22]);
-        let error0 = Math.abs(nnOutput.neurons[0].value - testOutput[0]);
-        let error1 = Math.abs(nnOutput.neurons[1].value - testOutput[1]);
-        let totalError = (error0 + error1) / 2;
-        return [totalError, 0];
-      });
-    }
-  };
-  var Layer = class {
-    neurons;
-    constructor(neurons) {
-      this.neurons = neurons;
-    }
-  };
-  var Neuron = class {
-    value;
-    weights;
-    bias;
-    activationFunction;
-    // For backpropagation
-    gradient = 0;
-    // Gradient of the loss with respect to this neuron's output
-    preActivation = 0;
-    // Value before activation function
-    biasVelocity = 0;
-    // Momentum for bias
-    constructor(weights, bias, activationFunction2) {
-      this.value = 0;
-      this.weights = weights;
-      this.bias = bias;
-      this.activationFunction = activationFunction2;
-    }
-    activate() {
-      this.preActivation = this.value;
-      switch (this.activationFunction) {
-        case "relu":
-          this.value = this.value <= 0 ? 0 : this.value;
-          break;
-        case "sigmoid":
-          this.value = 1 / (1 + Math.pow(Math.E, -this.value));
-          break;
-        case "tanh":
-          this.value = Math.tanh(this.value);
-          break;
+      // Calculate derivative of activation function
+      activationDerivative() {
+        switch (this.activationFunction) {
+          case "relu":
+            return this.preActivation > 0 ? 1 : 0;
+          case "sigmoid":
+            return this.value * (1 - this.value);
+          case "tanh":
+            return 1 - this.value * this.value;
+        }
+        return 0;
       }
     }
-    // Calculate derivative of activation function
-    activationDerivative() {
-      switch (this.activationFunction) {
-        case "relu":
-          return this.preActivation > 0 ? 1 : 0;
-        case "sigmoid":
-          return this.value * (1 - this.value);
-        case "tanh":
-          return 1 - this.value * this.value;
+    class Weight {
+      value;
+      to;
+      gradient = 0;
+      velocity = 0;
+      // Momentum for weight
+      constructor(value, to) {
+        this.value = value;
+        this.to = to;
       }
-      return 0;
     }
-  };
-  var Weight = class {
-    value;
-    to;
-    gradient = 0;
-    velocity = 0;
-    // Momentum for weight
-    constructor(value, to) {
-      this.value = value;
-      this.to = to;
+    class NeuronPosition {
+      layer;
+      index;
+      constructor(layer, index) {
+        this.layer = layer;
+        this.index = index;
+      }
     }
-  };
-  var NeuronPosition = class {
-    layer;
-    index;
-    constructor(layer, index) {
-      this.layer = layer;
-      this.index = index;
-    }
-  };
+  })(RiverML || (RiverML = {}));
 
   // decisiontree.js
-  var TreeNode = class {
-    feature = null;
-    // Which input feature to split on (0 or 1)
-    threshold = null;
-    // Split threshold
-    left = null;
-    right = null;
-    value = null;
-    // Leaf value (for each output)
-    isLeaf() {
-      return this.value !== null;
+  var RiverML2;
+  (function(RiverML4) {
+    class TreeNode {
+      feature = null;
+      // Which input feature to split on (0 or 1)
+      threshold = null;
+      // Split threshold
+      left = null;
+      right = null;
+      value = null;
+      // Leaf value (for each output)
+      isLeaf() {
+        return this.value !== null;
+      }
     }
-  };
-  var DecisionTree = class {
-    root = new TreeNode();
-    maxDepth = 4;
-    minSamplesLeaf = 2;
-    inputSize;
-    outputSize;
-    isClassification = false;
-    _drawLeft = 0;
-    _drawRight = 0;
-    constructor(inputSize2, outputSize2, maxDepth = 4) {
-      this.inputSize = inputSize2;
-      this.outputSize = outputSize2;
-      this.maxDepth = maxDepth;
-    }
-    // Train the decision tree on input-output pairs
-    train(inputs, outputs) {
-      this.root = this.buildTree(inputs, outputs, 0);
-    }
-    // Recursively build the tree
-    buildTree(inputs, outputs, depth) {
-      const node = new TreeNode();
-      if (depth >= this.maxDepth || inputs.length < this.minSamplesLeaf) {
-        node.value = this.calculateMean(outputs);
+    RiverML4.TreeNode = TreeNode;
+    class DecisionTree {
+      root = new TreeNode();
+      maxDepth = 4;
+      minSamplesLeaf = 2;
+      inputSize;
+      outputSize;
+      isClassification = false;
+      _drawLeft = 0;
+      _drawRight = 0;
+      constructor(inputSize2, outputSize2, maxDepth = 4) {
+        this.inputSize = inputSize2;
+        this.outputSize = outputSize2;
+        this.maxDepth = maxDepth;
+      }
+      // Train the decision tree on input-output pairs
+      train(inputs, outputs) {
+        this.root = this.buildTree(inputs, outputs, 0);
+      }
+      // Recursively build the tree
+      buildTree(inputs, outputs, depth) {
+        const node = new TreeNode();
+        if (depth >= this.maxDepth || inputs.length < this.minSamplesLeaf) {
+          node.value = this.calculateMean(outputs);
+          return node;
+        }
+        const bestSplit = this.findBestSplit(inputs, outputs);
+        if (bestSplit === null) {
+          node.value = this.calculateMean(outputs);
+          return node;
+        }
+        node.feature = bestSplit.feature;
+        node.threshold = bestSplit.threshold;
+        const [leftInputs, leftOutputs, rightInputs, rightOutputs] = this.splitData(inputs, outputs, bestSplit.feature, bestSplit.threshold);
+        node.left = this.buildTree(leftInputs, leftOutputs, depth + 1);
+        node.right = this.buildTree(rightInputs, rightOutputs, depth + 1);
         return node;
       }
-      const bestSplit = this.findBestSplit(inputs, outputs);
-      if (bestSplit === null) {
-        node.value = this.calculateMean(outputs);
-        return node;
+      // Find the best feature and threshold to split on
+      findBestSplit(inputs, outputs) {
+        let bestVariance = Infinity;
+        let bestSplit = null;
+        for (let feature = 0; feature < this.inputSize; feature++) {
+          const values = inputs.map((inp) => inp[feature]);
+          const uniqueValues = [...new Set(values)].sort((a, b) => a - b);
+          for (let i = 0; i < uniqueValues.length - 1; i++) {
+            const threshold = (uniqueValues[i] + uniqueValues[i + 1]) / 2;
+            const [leftInputs, leftOutputs, rightInputs, rightOutputs] = this.splitData(inputs, outputs, feature, threshold);
+            if (leftOutputs.length === 0 || rightOutputs.length === 0)
+              continue;
+            const leftVar = this.calculateVariance(leftOutputs);
+            const rightVar = this.calculateVariance(rightOutputs);
+            const totalVar = (leftOutputs.length * leftVar + rightOutputs.length * rightVar) / outputs.length;
+            if (totalVar < bestVariance) {
+              bestVariance = totalVar;
+              bestSplit = { feature, threshold };
+            }
+          }
+        }
+        return bestSplit;
       }
-      node.feature = bestSplit.feature;
-      node.threshold = bestSplit.threshold;
-      const [leftInputs, leftOutputs, rightInputs, rightOutputs] = this.splitData(inputs, outputs, bestSplit.feature, bestSplit.threshold);
-      node.left = this.buildTree(leftInputs, leftOutputs, depth + 1);
-      node.right = this.buildTree(rightInputs, rightOutputs, depth + 1);
-      return node;
-    }
-    // Find the best feature and threshold to split on
-    findBestSplit(inputs, outputs) {
-      let bestVariance = Infinity;
-      let bestSplit = null;
-      for (let feature = 0; feature < this.inputSize; feature++) {
-        const values = inputs.map((inp) => inp[feature]);
-        const uniqueValues = [...new Set(values)].sort((a, b) => a - b);
-        for (let i = 0; i < uniqueValues.length - 1; i++) {
-          const threshold = (uniqueValues[i] + uniqueValues[i + 1]) / 2;
-          const [leftInputs, leftOutputs, rightInputs, rightOutputs] = this.splitData(inputs, outputs, feature, threshold);
-          if (leftOutputs.length === 0 || rightOutputs.length === 0)
-            continue;
-          const leftVar = this.calculateVariance(leftOutputs);
-          const rightVar = this.calculateVariance(rightOutputs);
-          const totalVar = (leftOutputs.length * leftVar + rightOutputs.length * rightVar) / outputs.length;
-          if (totalVar < bestVariance) {
-            bestVariance = totalVar;
-            bestSplit = { feature, threshold };
+      // Split data based on feature and threshold
+      splitData(inputs, outputs, feature, threshold) {
+        const leftInputs = [];
+        const leftOutputs = [];
+        const rightInputs = [];
+        const rightOutputs = [];
+        for (let i = 0; i < inputs.length; i++) {
+          if (inputs[i][feature] < threshold) {
+            leftInputs.push(inputs[i]);
+            leftOutputs.push(outputs[i]);
+          } else {
+            rightInputs.push(inputs[i]);
+            rightOutputs.push(outputs[i]);
+          }
+        }
+        return [leftInputs, leftOutputs, rightInputs, rightOutputs];
+      }
+      // Calculate mean of outputs
+      calculateMean(outputs) {
+        if (outputs.length === 0)
+          return new Array(this.outputSize).fill(0);
+        const sum = new Array(this.outputSize).fill(0);
+        for (const output of outputs) {
+          for (let i = 0; i < this.outputSize; i++) {
+            sum[i] += output[i];
+          }
+        }
+        return sum.map((s) => s / outputs.length);
+      }
+      // Calculate variance of outputs
+      calculateVariance(outputs) {
+        if (outputs.length === 0)
+          return 0;
+        const mean = this.calculateMean(outputs);
+        let variance = 0;
+        for (const output of outputs) {
+          for (let i = 0; i < this.outputSize; i++) {
+            variance += (output[i] - mean[i]) ** 2;
+          }
+        }
+        return variance / outputs.length;
+      }
+      // Predict output for given input
+      predict(input) {
+        let node = this.root;
+        while (!node.isLeaf()) {
+          if (input[node.feature] < node.threshold) {
+            node = node.left;
+          } else {
+            node = node.right;
+          }
+        }
+        return node.value;
+      }
+      // Get the set of nodes on the prediction path for a given input
+      getPath(input) {
+        const path = /* @__PURE__ */ new Set();
+        let node = this.root;
+        while (node) {
+          path.add(node);
+          if (node.isLeaf())
+            break;
+          if (input[node.feature] < node.threshold) {
+            node = node.left;
+          } else {
+            node = node.right;
+          }
+        }
+        return path;
+      }
+      // Draw the tree, optionally highlighting a prediction path
+      draw(ctx2, left, top, width, height, highlightPath) {
+        ctx2.save();
+        this._drawLeft = left;
+        this._drawRight = left + width;
+        ctx2.fillStyle = "#f8f8f8";
+        ctx2.fillRect(left, top, width, height);
+        if (this.root) {
+          this.drawNode(ctx2, this.root, left + width / 2, top + 15, width * 0.8, height - 20, 0, highlightPath);
+        }
+        ctx2.restore();
+      }
+      // Recursively draw tree nodes
+      drawNode(ctx2, node, x, y, width, height, depth, highlightPath) {
+        const onPath = highlightPath ? highlightPath.has(node) : false;
+        const nodeRadius = onPath ? 10 : 8;
+        const verticalGap = 25;
+        const clampX = (textX, text, font) => {
+          ctx2.font = font;
+          const tw = ctx2.measureText(text).width;
+          const minX = this._drawLeft + tw / 2 + 2;
+          const maxX = this._drawRight - tw / 2 - 2;
+          return Math.max(minX, Math.min(maxX, textX));
+        };
+        if (node.isLeaf()) {
+          ctx2.fillStyle = onPath ? "#E53935" : "#4CAF50";
+          ctx2.beginPath();
+          ctx2.arc(x, y, nodeRadius, 0, 2 * Math.PI);
+          ctx2.fill();
+          const leafFont = onPath ? "bold 10px sans-serif" : "9px sans-serif";
+          ctx2.fillStyle = onPath ? "#E53935" : "#000";
+          ctx2.font = leafFont;
+          ctx2.textAlign = "center";
+          let valStr;
+          if (this.isClassification && node.value.length > 1) {
+            let maxIdx = 0;
+            for (let k = 1; k < node.value.length; k++) {
+              if (node.value[k] > node.value[maxIdx])
+                maxIdx = k;
+            }
+            valStr = (maxIdx + 1).toString();
+          } else {
+            valStr = node.value.map((v) => v.toFixed(2)).join(", ");
+          }
+          ctx2.fillText(valStr, clampX(x, valStr, leafFont), y + nodeRadius + 10);
+        } else {
+          ctx2.fillStyle = onPath ? "#E53935" : "#2196F3";
+          ctx2.beginPath();
+          ctx2.arc(x, y, nodeRadius, 0, 2 * Math.PI);
+          ctx2.fill();
+          const splitFont = onPath ? "bold 9px sans-serif" : "8px sans-serif";
+          ctx2.fillStyle = onPath ? "#E53935" : "#000";
+          ctx2.font = splitFont;
+          ctx2.textAlign = "center";
+          const featureName = node.feature === 0 ? "x" : "y";
+          const splitText = `${featureName}<${node.threshold.toFixed(1)}`;
+          ctx2.fillText(splitText, clampX(x, splitText, splitFont), y - nodeRadius - 3);
+          if (node.left && node.right) {
+            const childWidth = width / 2;
+            const leftX = x - width / 4;
+            const rightX = x + width / 4;
+            const childY = y + verticalGap;
+            const leftOnPath = highlightPath ? highlightPath.has(node.left) : false;
+            ctx2.strokeStyle = leftOnPath ? "#E53935" : "#666";
+            ctx2.lineWidth = leftOnPath ? 2.5 : 1;
+            ctx2.beginPath();
+            ctx2.moveTo(x, y + nodeRadius);
+            ctx2.lineTo(leftX, childY - (leftOnPath ? 10 : 8));
+            ctx2.stroke();
+            const rightOnPath = highlightPath ? highlightPath.has(node.right) : false;
+            ctx2.strokeStyle = rightOnPath ? "#E53935" : "#666";
+            ctx2.lineWidth = rightOnPath ? 2.5 : 1;
+            ctx2.beginPath();
+            ctx2.moveTo(x, y + nodeRadius);
+            ctx2.lineTo(rightX, childY - (rightOnPath ? 10 : 8));
+            ctx2.stroke();
+            this.drawNode(ctx2, node.left, leftX, childY, childWidth, height - verticalGap, depth + 1, highlightPath);
+            this.drawNode(ctx2, node.right, rightX, childY, childWidth, height - verticalGap, depth + 1, highlightPath);
           }
         }
       }
-      return bestSplit;
     }
-    // Split data based on feature and threshold
-    splitData(inputs, outputs, feature, threshold) {
-      const leftInputs = [];
-      const leftOutputs = [];
-      const rightInputs = [];
-      const rightOutputs = [];
-      for (let i = 0; i < inputs.length; i++) {
-        if (inputs[i][feature] < threshold) {
-          leftInputs.push(inputs[i]);
-          leftOutputs.push(outputs[i]);
-        } else {
-          rightInputs.push(inputs[i]);
-          rightOutputs.push(outputs[i]);
-        }
-      }
-      return [leftInputs, leftOutputs, rightInputs, rightOutputs];
-    }
-    // Calculate mean of outputs
-    calculateMean(outputs) {
-      if (outputs.length === 0)
-        return new Array(this.outputSize).fill(0);
-      const sum = new Array(this.outputSize).fill(0);
-      for (const output of outputs) {
-        for (let i = 0; i < this.outputSize; i++) {
-          sum[i] += output[i];
-        }
-      }
-      return sum.map((s) => s / outputs.length);
-    }
-    // Calculate variance of outputs
-    calculateVariance(outputs) {
-      if (outputs.length === 0)
-        return 0;
-      const mean = this.calculateMean(outputs);
-      let variance = 0;
-      for (const output of outputs) {
-        for (let i = 0; i < this.outputSize; i++) {
-          variance += (output[i] - mean[i]) ** 2;
-        }
-      }
-      return variance / outputs.length;
-    }
-    // Predict output for given input
-    predict(input) {
-      let node = this.root;
-      while (!node.isLeaf()) {
-        if (input[node.feature] < node.threshold) {
-          node = node.left;
-        } else {
-          node = node.right;
-        }
-      }
-      return node.value;
-    }
-    // Get the set of nodes on the prediction path for a given input
-    getPath(input) {
-      const path = /* @__PURE__ */ new Set();
-      let node = this.root;
-      while (node) {
-        path.add(node);
-        if (node.isLeaf())
-          break;
-        if (input[node.feature] < node.threshold) {
-          node = node.left;
-        } else {
-          node = node.right;
-        }
-      }
-      return path;
-    }
-    // Draw the tree, optionally highlighting a prediction path
-    draw(ctx2, left, top, width, height, highlightPath) {
-      ctx2.save();
-      this._drawLeft = left;
-      this._drawRight = left + width;
-      ctx2.fillStyle = "#f8f8f8";
-      ctx2.fillRect(left, top, width, height);
-      if (this.root) {
-        this.drawNode(ctx2, this.root, left + width / 2, top + 15, width * 0.8, height - 20, 0, highlightPath);
-      }
-      ctx2.restore();
-    }
-    // Recursively draw tree nodes
-    drawNode(ctx2, node, x, y, width, height, depth, highlightPath) {
-      const onPath = highlightPath ? highlightPath.has(node) : false;
-      const nodeRadius = onPath ? 10 : 8;
-      const verticalGap = 25;
-      const clampX = (textX, text, font) => {
-        ctx2.font = font;
-        const tw = ctx2.measureText(text).width;
-        const minX = this._drawLeft + tw / 2 + 2;
-        const maxX = this._drawRight - tw / 2 - 2;
-        return Math.max(minX, Math.min(maxX, textX));
-      };
-      if (node.isLeaf()) {
-        ctx2.fillStyle = onPath ? "#E53935" : "#4CAF50";
-        ctx2.beginPath();
-        ctx2.arc(x, y, nodeRadius, 0, 2 * Math.PI);
-        ctx2.fill();
-        const leafFont = onPath ? "bold 10px sans-serif" : "9px sans-serif";
-        ctx2.fillStyle = onPath ? "#E53935" : "#000";
-        ctx2.font = leafFont;
-        ctx2.textAlign = "center";
-        let valStr;
-        if (this.isClassification && node.value.length > 1) {
-          let maxIdx = 0;
-          for (let k = 1; k < node.value.length; k++) {
-            if (node.value[k] > node.value[maxIdx])
-              maxIdx = k;
-          }
-          valStr = (maxIdx + 1).toString();
-        } else {
-          valStr = node.value.map((v) => v.toFixed(2)).join(", ");
-        }
-        ctx2.fillText(valStr, clampX(x, valStr, leafFont), y + nodeRadius + 10);
-      } else {
-        ctx2.fillStyle = onPath ? "#E53935" : "#2196F3";
-        ctx2.beginPath();
-        ctx2.arc(x, y, nodeRadius, 0, 2 * Math.PI);
-        ctx2.fill();
-        const splitFont = onPath ? "bold 9px sans-serif" : "8px sans-serif";
-        ctx2.fillStyle = onPath ? "#E53935" : "#000";
-        ctx2.font = splitFont;
-        ctx2.textAlign = "center";
-        const featureName = node.feature === 0 ? "x" : "y";
-        const splitText = `${featureName}<${node.threshold.toFixed(1)}`;
-        ctx2.fillText(splitText, clampX(x, splitText, splitFont), y - nodeRadius - 3);
-        if (node.left && node.right) {
-          const childWidth = width / 2;
-          const leftX = x - width / 4;
-          const rightX = x + width / 4;
-          const childY = y + verticalGap;
-          const leftOnPath = highlightPath ? highlightPath.has(node.left) : false;
-          ctx2.strokeStyle = leftOnPath ? "#E53935" : "#666";
-          ctx2.lineWidth = leftOnPath ? 2.5 : 1;
-          ctx2.beginPath();
-          ctx2.moveTo(x, y + nodeRadius);
-          ctx2.lineTo(leftX, childY - (leftOnPath ? 10 : 8));
-          ctx2.stroke();
-          const rightOnPath = highlightPath ? highlightPath.has(node.right) : false;
-          ctx2.strokeStyle = rightOnPath ? "#E53935" : "#666";
-          ctx2.lineWidth = rightOnPath ? 2.5 : 1;
-          ctx2.beginPath();
-          ctx2.moveTo(x, y + nodeRadius);
-          ctx2.lineTo(rightX, childY - (rightOnPath ? 10 : 8));
-          ctx2.stroke();
-          this.drawNode(ctx2, node.left, leftX, childY, childWidth, height - verticalGap, depth + 1, highlightPath);
-          this.drawNode(ctx2, node.right, rightX, childY, childWidth, height - verticalGap, depth + 1, highlightPath);
-        }
-      }
-    }
-  };
+    RiverML4.DecisionTree = DecisionTree;
+  })(RiverML2 || (RiverML2 = {}));
 
   // xgboost.js
-  var XGBoostEnsemble = class _XGBoostEnsemble {
-    trees = [];
-    generation = 0;
-    inputSize;
-    outputSize;
-    shrinkage = 0.1;
-    maxDepth = 4;
-    maxTrees = Infinity;
-    isClassification = false;
-    trainRMSE = 0;
-    trainMAE = 0;
-    testRMSE = 0;
-    testMAE = 0;
-    constructor(inputSize2, outputSize2, shrinkage = 0.1, maxDepth = 4, maxTrees = Infinity, isClassification = false) {
-      this.inputSize = inputSize2;
-      this.outputSize = outputSize2;
-      this.shrinkage = shrinkage;
-      this.maxDepth = maxDepth;
-      this.maxTrees = maxTrees;
-      this.isClassification = isClassification;
-    }
-    // Train: Add one new tree that learns the residuals
-    train(inputs, outputs, testInputs, testFn) {
-      this.generation++;
-      if (this.trees.length === 0) {
-        const baseTree = new DecisionTree(this.inputSize, this.outputSize, this.maxDepth);
-        baseTree.isClassification = this.isClassification;
-        baseTree.train(inputs, outputs);
-        this.trees.push(baseTree);
-        this.computeErrors(inputs, outputs, testInputs, testFn);
-        return;
-      }
-      if (this.trees.length < this.maxTrees) {
-        const residuals = [];
-        for (let i = 0; i < inputs.length; i++) {
-          const pred = this.predict(inputs[i]);
-          const residual = outputs[i].map((val, idx) => val - pred[idx]);
-          residuals.push(residual);
+  var RiverML3;
+  (function(RiverML4) {
+    var DecisionTree = RiverML2.DecisionTree;
+    var TreeNode = RiverML2.TreeNode;
+    class XGBoost2 {
+      trees = [];
+      generation = 0;
+      inputSize;
+      outputSize;
+      shrinkage = 0.1;
+      maxDepth = 4;
+      maxTrees = Infinity;
+      isClassification = false;
+      trainRMSE = 0;
+      trainMAE = 0;
+      testRMSE = 0;
+      testMAE = 0;
+      constructor(inputSizeOrSeed, outputSize2 = 1, shrinkage = 0.1, maxDepth = 4, maxTrees = Infinity, isClassification = false) {
+        if (typeof inputSizeOrSeed === "string") {
+          const loaded = XGBoost2.fromSeed(inputSizeOrSeed);
+          this.inputSize = loaded.inputSize;
+          this.outputSize = loaded.outputSize;
+          this.shrinkage = loaded.shrinkage;
+          this.maxDepth = loaded.maxDepth;
+          this.maxTrees = loaded.maxTrees;
+          this.isClassification = loaded.isClassification;
+          this.trees = loaded.trees;
+          this.generation = loaded.generation;
+          return;
         }
-        const newTree = new DecisionTree(this.inputSize, this.outputSize, this.maxDepth);
-        newTree.isClassification = this.isClassification;
-        newTree.train(inputs, residuals);
-        this.trees.push(newTree);
+        this.inputSize = inputSizeOrSeed;
+        this.outputSize = outputSize2;
+        this.shrinkage = shrinkage;
+        this.maxDepth = maxDepth;
+        this.maxTrees = maxTrees;
+        this.isClassification = isClassification;
       }
-      this.computeErrors(inputs, outputs, testInputs, testFn);
-    }
-    computeErrors(inputs, outputs, testInputs, testFn) {
-      let sqSum = 0, absSum = 0;
-      for (let i = 0; i < inputs.length; i++) {
-        const pred = this.predict(inputs[i]);
-        for (let j = 0; j < this.outputSize; j++) {
-          const diff = Math.abs(pred[j] - outputs[i][j]);
-          sqSum += diff ** 2;
-          absSum += diff;
+      // Train: Add one new tree that learns the residuals
+      train(inputs, outputs, testInputs, testFn) {
+        this.generation++;
+        if (this.trees.length === 0) {
+          const baseTree = new DecisionTree(this.inputSize, this.outputSize, this.maxDepth);
+          baseTree.isClassification = this.isClassification;
+          baseTree.train(inputs, outputs);
+          this.trees.push(baseTree);
+          this.computeErrors(inputs, outputs, testInputs, testFn);
+          return;
         }
-      }
-      this.trainRMSE = Math.sqrt(sqSum / inputs.length);
-      this.trainMAE = absSum / inputs.length;
-      if (!testInputs || !testFn) {
-        this.testRMSE = 0;
-        this.testMAE = 0;
-        return;
-      }
-      sqSum = 0;
-      absSum = 0;
-      for (let i = 0; i < testInputs.length; i++) {
-        const pred = this.predict(testInputs[i]);
-        const expected = testFn(testInputs[i]);
-        for (let j = 0; j < this.outputSize; j++) {
-          const diff = Math.abs(pred[j] - expected[j]);
-          sqSum += diff ** 2;
-          absSum += diff;
-        }
-      }
-      this.testRMSE = Math.sqrt(sqSum / testInputs.length);
-      this.testMAE = absSum / testInputs.length;
-    }
-    // Predict: Sum predictions from all trees
-    predict(input) {
-      if (this.trees.length === 0) {
-        return new Array(this.outputSize).fill(0);
-      }
-      const result = new Array(this.outputSize).fill(0);
-      for (let i = 0; i < this.trees.length; i++) {
-        const treePred = this.trees[i].predict(input);
-        const weight = i === 0 ? 1 : this.shrinkage;
-        for (let j = 0; j < this.outputSize; j++) {
-          result[j] += treePred[j] * weight;
-        }
-      }
-      return result;
-    }
-    // Seed format shared with the C++ version:
-    // XGBSEED1|inputSize,outputSize|shrinkage|tree;tree;...
-    // each tree is preorder csv tokens: d,feature,threshold,... or l,v0,v1,...
-    toSeed() {
-      const serNode = (node) => {
-        if (node.isLeaf())
-          return "l," + node.value.join(",");
-        return `d,${node.feature},${node.threshold},` + serNode(node.left) + "," + serNode(node.right);
-      };
-      const trees = this.trees.map((t) => serNode(t.root)).join(";");
-      return `XGBSEED1|${this.inputSize},${this.outputSize}|${this.shrinkage}|${trees}`;
-    }
-    static fromSeed(seed) {
-      const parts = seed.trim().split("|");
-      if (parts.length !== 4 || parts[0] !== "XGBSEED1") {
-        throw new Error("Invalid seed: expected XGBSEED1|sizes|shrinkage|trees");
-      }
-      const sizes = parts[1].split(",").map(Number);
-      const shrinkage = Number(parts[2]);
-      if (sizes.length !== 2 || sizes.some(isNaN) || isNaN(shrinkage)) {
-        throw new Error("Invalid seed: bad sizes or shrinkage");
-      }
-      const [inputSize2, outputSize2] = sizes;
-      const ens = new _XGBoostEnsemble(inputSize2, outputSize2, shrinkage, 4, Infinity, outputSize2 > 1);
-      for (const treeStr of parts[3].split(";")) {
-        const tokens = treeStr.split(",");
-        let pos = 0;
-        const parseNode = () => {
-          const node = new TreeNode();
-          const tag = tokens[pos++];
-          if (tag === "l") {
-            node.value = [];
-            for (let i = 0; i < outputSize2; i++)
-              node.value.push(Number(tokens[pos++]));
-            if (node.value.some(isNaN))
-              throw new Error("Invalid seed: bad leaf value");
-          } else if (tag === "d") {
-            node.feature = parseInt(tokens[pos++], 10);
-            node.threshold = Number(tokens[pos++]);
-            if (isNaN(node.feature) || isNaN(node.threshold))
-              throw new Error("Invalid seed: bad split");
-            node.left = parseNode();
-            node.right = parseNode();
-          } else {
-            throw new Error("Invalid seed: unknown node tag");
+        if (this.trees.length < this.maxTrees) {
+          const residuals = [];
+          for (let i = 0; i < inputs.length; i++) {
+            const pred = this.run(inputs[i]);
+            const residual = outputs[i].map((val, idx) => val - pred[idx]);
+            residuals.push(residual);
           }
-          return node;
+          const newTree = new DecisionTree(this.inputSize, this.outputSize, this.maxDepth);
+          newTree.isClassification = this.isClassification;
+          newTree.train(inputs, residuals);
+          this.trees.push(newTree);
+        }
+        this.computeErrors(inputs, outputs, testInputs, testFn);
+      }
+      computeErrors(inputs, outputs, testInputs, testFn) {
+        let sqSum = 0, absSum = 0;
+        for (let i = 0; i < inputs.length; i++) {
+          const pred = this.run(inputs[i]);
+          for (let j = 0; j < this.outputSize; j++) {
+            const diff = Math.abs(pred[j] - outputs[i][j]);
+            sqSum += diff ** 2;
+            absSum += diff;
+          }
+        }
+        this.trainRMSE = Math.sqrt(sqSum / inputs.length);
+        this.trainMAE = absSum / inputs.length;
+        if (!testInputs || !testFn) {
+          this.testRMSE = 0;
+          this.testMAE = 0;
+          return;
+        }
+        sqSum = 0;
+        absSum = 0;
+        for (let i = 0; i < testInputs.length; i++) {
+          const pred = this.run(testInputs[i]);
+          const expected = testFn(testInputs[i]);
+          for (let j = 0; j < this.outputSize; j++) {
+            const diff = Math.abs(pred[j] - expected[j]);
+            sqSum += diff ** 2;
+            absSum += diff;
+          }
+        }
+        this.testRMSE = Math.sqrt(sqSum / testInputs.length);
+        this.testMAE = absSum / testInputs.length;
+      }
+      // Sums every tree, base tree at full weight and the rest scaled by shrinkage
+      run(input) {
+        if (this.trees.length === 0) {
+          return new Array(this.outputSize).fill(0);
+        }
+        const result = new Array(this.outputSize).fill(0);
+        for (let i = 0; i < this.trees.length; i++) {
+          const treePred = this.trees[i].predict(input);
+          const weight = i === 0 ? 1 : this.shrinkage;
+          for (let j = 0; j < this.outputSize; j++) {
+            result[j] += treePred[j] * weight;
+          }
+        }
+        return result;
+      }
+      // Seed format shared with the C++ version:
+      // XGBSEED1|inputSize,outputSize|shrinkage|tree;tree;...
+      // each tree is preorder csv tokens: d,feature,threshold,... or l,v0,v1,...
+      toSeed() {
+        const serNode = (node) => {
+          if (node.isLeaf())
+            return "l," + node.value.join(",");
+          return `d,${node.feature},${node.threshold},` + serNode(node.left) + "," + serNode(node.right);
         };
-        const tree = new DecisionTree(inputSize2, outputSize2);
-        tree.isClassification = outputSize2 > 1;
-        tree.root = parseNode();
-        if (pos !== tokens.length)
-          throw new Error("Invalid seed: leftover tree tokens");
-        ens.trees.push(tree);
+        const trees = this.trees.map((t) => serNode(t.root)).join(";");
+        return `XGBSEED1|${this.inputSize},${this.outputSize}|${this.shrinkage}|${trees}`;
       }
-      ens.generation = ens.trees.length;
-      return ens;
-    }
-    static MIN_CELL_HEIGHT = 200;
-    // Returns the total content height (for scroll calculations)
-    getContentHeight(displayHeaderHeight, panelHeight) {
-      if (this.trees.length === 0)
-        return displayHeaderHeight;
-      const cols = Math.min(4, this.trees.length);
-      const rows = Math.ceil(this.trees.length / cols);
-      const availableHeight = panelHeight - displayHeaderHeight;
-      const cellHeight = Math.max(_XGBoostEnsemble.MIN_CELL_HEIGHT, availableHeight / rows);
-      return displayHeaderHeight + rows * cellHeight;
-    }
-    drawHeader(ctx2, left, top, width, displayHeaderHeight) {
-      ctx2.fillStyle = "#e0e0e0";
-      ctx2.fillRect(left, top, width, displayHeaderHeight);
-      ctx2.fillStyle = "#000000";
-      ctx2.font = "12px sans-serif";
-      ctx2.textBaseline = "middle";
-      const text = `Gen: ${this.generation} | Trees: ${this.trees.length} | Train \u03F5 RMSE: ${this.trainRMSE.toFixed(4)} \u03BC MAE: ${this.trainMAE.toFixed(4)} | Test \u03F5 RMSE: ${this.testRMSE.toFixed(4)} \u03BC MAE: ${this.testMAE.toFixed(4)}`;
-      ctx2.fillText(text, left + 5, top + displayHeaderHeight / 2);
-    }
-    // Draw a single tree (base or latest) filling the full content area (no header — caller draws it)
-    drawSingleTree(ctx2, left, top, width, height, treeIndex, input) {
-      ctx2.save();
-      if (this.trees.length === 0 || treeIndex < 0 || treeIndex >= this.trees.length) {
-        ctx2.restore();
-        return;
+      static fromSeed(seed) {
+        const parts = seed.trim().split("|");
+        if (parts.length !== 4 || parts[0] !== "XGBSEED1") {
+          throw new Error("Invalid seed: expected XGBSEED1|sizes|shrinkage|trees");
+        }
+        const sizes = parts[1].split(",").map(Number);
+        const shrinkage = Number(parts[2]);
+        if (sizes.length !== 2 || sizes.some(isNaN) || isNaN(shrinkage)) {
+          throw new Error("Invalid seed: bad sizes or shrinkage");
+        }
+        const [inputSize2, outputSize2] = sizes;
+        const ens = new XGBoost2(inputSize2, outputSize2, shrinkage, 4, Infinity, outputSize2 > 1);
+        for (const treeStr of parts[3].split(";")) {
+          const tokens = treeStr.split(",");
+          let pos = 0;
+          const parseNode = () => {
+            const node = new TreeNode();
+            const tag = tokens[pos++];
+            if (tag === "l") {
+              node.value = [];
+              for (let i = 0; i < outputSize2; i++)
+                node.value.push(Number(tokens[pos++]));
+              if (node.value.some(isNaN))
+                throw new Error("Invalid seed: bad leaf value");
+            } else if (tag === "d") {
+              node.feature = parseInt(tokens[pos++], 10);
+              node.threshold = Number(tokens[pos++]);
+              if (isNaN(node.feature) || isNaN(node.threshold))
+                throw new Error("Invalid seed: bad split");
+              node.left = parseNode();
+              node.right = parseNode();
+            } else {
+              throw new Error("Invalid seed: unknown node tag");
+            }
+            return node;
+          };
+          const tree = new DecisionTree(inputSize2, outputSize2);
+          tree.isClassification = outputSize2 > 1;
+          tree.root = parseNode();
+          if (pos !== tokens.length)
+            throw new Error("Invalid seed: leftover tree tokens");
+          ens.trees.push(tree);
+        }
+        ens.generation = ens.trees.length;
+        return ens;
       }
-      const tree = this.trees[treeIndex];
-      ctx2.fillStyle = "#000000";
-      ctx2.font = "11px sans-serif";
-      ctx2.textAlign = "left";
-      ctx2.textBaseline = "top";
-      const label = treeIndex === 0 ? `Tree 0 (base)` : `Tree ${treeIndex}`;
-      ctx2.fillText(label, left + 5, top + 2);
-      const highlightPath = input ? tree.getPath(input) : void 0;
-      tree.draw(ctx2, left, top + 15, width, height - 15, highlightPath);
-      if (input && highlightPath) {
-        const pred = tree.predict(input);
-        ctx2.fillStyle = "#E53935";
-        ctx2.font = "bold 12px sans-serif";
-        ctx2.textAlign = "right";
-        ctx2.textBaseline = "top";
-        ctx2.fillText(`Prediction: ${pred.map((v) => v.toFixed(3)).join(", ")}`, left + width - 5, top + 2);
+      static MIN_CELL_HEIGHT = 200;
+      // Returns the total content height (for scroll calculations)
+      getContentHeight(displayHeaderHeight, panelHeight) {
+        if (this.trees.length === 0)
+          return displayHeaderHeight;
+        const cols = Math.min(4, this.trees.length);
+        const rows = Math.ceil(this.trees.length / cols);
+        const availableHeight = panelHeight - displayHeaderHeight;
+        const cellHeight = Math.max(XGBoost2.MIN_CELL_HEIGHT, availableHeight / rows);
+        return displayHeaderHeight + rows * cellHeight;
       }
-      ctx2.restore();
-    }
-    // Draw all trees in a scrollable grid, with input path highlighting
-    draw(ctx2, left, top, width, height, displayHeaderHeight, scrollY = 0, input) {
-      ctx2.save();
-      ctx2.beginPath();
-      ctx2.rect(left, top + displayHeaderHeight, width, height - displayHeaderHeight);
-      ctx2.clip();
-      if (this.trees.length === 0) {
-        ctx2.restore();
-        return;
-      }
-      const cols = Math.min(4, this.trees.length);
-      const rows = Math.ceil(this.trees.length / cols);
-      const cellWidth = width / cols;
-      const availableHeight = height - displayHeaderHeight;
-      const cellHeight = Math.max(_XGBoostEnsemble.MIN_CELL_HEIGHT, availableHeight / rows);
-      for (let i = 0; i < this.trees.length; i++) {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const x = left + col * cellWidth;
-        const y = top + displayHeaderHeight + row * cellHeight - scrollY;
-        if (y + cellHeight < top + displayHeaderHeight || y > top + height)
-          continue;
-        ctx2.fillStyle = i === 0 ? "#f0f0ff" : "#f8f8f8";
-        ctx2.fillRect(x + 2, y + 2, cellWidth - 4, cellHeight - 4);
+      drawHeader(ctx2, left, top, width, displayHeaderHeight) {
+        ctx2.fillStyle = "#e0e0e0";
+        ctx2.fillRect(left, top, width, displayHeaderHeight);
         ctx2.fillStyle = "#000000";
-        ctx2.font = "10px sans-serif";
+        ctx2.font = "12px sans-serif";
+        ctx2.textBaseline = "middle";
+        const text = `Gen: ${this.generation} | Trees: ${this.trees.length} | Train \u03F5 RMSE: ${this.trainRMSE.toFixed(4)} \u03BC MAE: ${this.trainMAE.toFixed(4)} | Test \u03F5 RMSE: ${this.testRMSE.toFixed(4)} \u03BC MAE: ${this.testMAE.toFixed(4)}`;
+        ctx2.fillText(text, left + 5, top + displayHeaderHeight / 2);
+      }
+      // Draw a single tree (base or latest) filling the full content area (no header — caller draws it)
+      drawSingleTree(ctx2, left, top, width, height, treeIndex, input) {
+        ctx2.save();
+        if (this.trees.length === 0 || treeIndex < 0 || treeIndex >= this.trees.length) {
+          ctx2.restore();
+          return;
+        }
+        const tree = this.trees[treeIndex];
+        ctx2.fillStyle = "#000000";
+        ctx2.font = "11px sans-serif";
         ctx2.textAlign = "left";
-        ctx2.fillText(`Tree ${i}${i === 0 ? " (base)" : ""}`, x + 5, y + 12);
-        const highlightPath = input ? this.trees[i].getPath(input) : void 0;
-        this.trees[i].draw(ctx2, x + 5, y + 20, cellWidth - 10, cellHeight - 25, highlightPath);
+        ctx2.textBaseline = "top";
+        const label = treeIndex === 0 ? `Tree 0 (base)` : `Tree ${treeIndex}`;
+        ctx2.fillText(label, left + 5, top + 2);
+        const highlightPath = input ? tree.getPath(input) : void 0;
+        tree.draw(ctx2, left, top + 15, width, height - 15, highlightPath);
+        if (input && highlightPath) {
+          const pred = tree.predict(input);
+          ctx2.fillStyle = "#E53935";
+          ctx2.font = "bold 12px sans-serif";
+          ctx2.textAlign = "right";
+          ctx2.textBaseline = "top";
+          ctx2.fillText(`Prediction: ${pred.map((v) => v.toFixed(3)).join(", ")}`, left + width - 5, top + 2);
+        }
+        ctx2.restore();
       }
-      const totalContentHeight = rows * cellHeight;
-      if (totalContentHeight > availableHeight) {
-        const scrollBarHeight = Math.max(20, availableHeight * (availableHeight / totalContentHeight));
-        const scrollBarY = top + displayHeaderHeight + scrollY / (totalContentHeight - availableHeight) * (availableHeight - scrollBarHeight);
-        ctx2.fillStyle = "rgba(0, 0, 0, 0.3)";
-        ctx2.fillRect(left + width - 6, scrollBarY, 4, scrollBarHeight);
+      // Draw all trees in a scrollable grid, with input path highlighting
+      draw(ctx2, left, top, width, height, displayHeaderHeight, scrollY = 0, input) {
+        ctx2.save();
+        ctx2.beginPath();
+        ctx2.rect(left, top + displayHeaderHeight, width, height - displayHeaderHeight);
+        ctx2.clip();
+        if (this.trees.length === 0) {
+          ctx2.restore();
+          return;
+        }
+        const cols = Math.min(4, this.trees.length);
+        const rows = Math.ceil(this.trees.length / cols);
+        const cellWidth = width / cols;
+        const availableHeight = height - displayHeaderHeight;
+        const cellHeight = Math.max(XGBoost2.MIN_CELL_HEIGHT, availableHeight / rows);
+        for (let i = 0; i < this.trees.length; i++) {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          const x = left + col * cellWidth;
+          const y = top + displayHeaderHeight + row * cellHeight - scrollY;
+          if (y + cellHeight < top + displayHeaderHeight || y > top + height)
+            continue;
+          ctx2.fillStyle = i === 0 ? "#f0f0ff" : "#f8f8f8";
+          ctx2.fillRect(x + 2, y + 2, cellWidth - 4, cellHeight - 4);
+          ctx2.fillStyle = "#000000";
+          ctx2.font = "10px sans-serif";
+          ctx2.textAlign = "left";
+          ctx2.fillText(`Tree ${i}${i === 0 ? " (base)" : ""}`, x + 5, y + 12);
+          const highlightPath = input ? this.trees[i].getPath(input) : void 0;
+          this.trees[i].draw(ctx2, x + 5, y + 20, cellWidth - 10, cellHeight - 25, highlightPath);
+        }
+        const totalContentHeight = rows * cellHeight;
+        if (totalContentHeight > availableHeight) {
+          const scrollBarHeight = Math.max(20, availableHeight * (availableHeight / totalContentHeight));
+          const scrollBarY = top + displayHeaderHeight + scrollY / (totalContentHeight - availableHeight) * (availableHeight - scrollBarHeight);
+          ctx2.fillStyle = "rgba(0, 0, 0, 0.3)";
+          ctx2.fillRect(left + width - 6, scrollBarY, 4, scrollBarHeight);
+        }
+        ctx2.restore();
       }
-      ctx2.restore();
     }
-  };
+    RiverML4.XGBoost = XGBoost2;
+  })(RiverML3 || (RiverML3 = {}));
 
   // index.js
+  var NeuralNetwork = RiverML.NeuralNetwork;
+  var NeuralNetworkList = RiverML.NeuralNetworkList;
+  var XGBoost = RiverML3.XGBoost;
   var canvas = document.getElementById("canvas");
   var ctx = canvas?.getContext("2d");
   if (!canvas || !ctx) {
@@ -1822,8 +1860,7 @@
       }
       if (trainingMethod !== "XGBoost" && nnl instanceof NeuralNetworkList) {
         nnl.computeTestErr((inputs) => {
-          const result = nnl instanceof NeuralNetworkList ? nnl.neuralNetworks[0].run(inputs) : { neurons: [{ value: 0 }] };
-          return result.neurons.map((n) => n.value);
+          return nnl instanceof NeuralNetworkList ? nnl.neuralNetworks[0].run(inputs) : [0];
         });
       }
       lastError = bestFitness;
@@ -1879,7 +1916,7 @@
           topPanelMaxScroll = 0;
           topPanelScroll = 0;
           let n = nnl.neuralNetworks[0].clone();
-          n.run(currentInputs);
+          n.forward(currentInputs);
           n.draw(ctx, 0, contentTop, canvas.width, contentHeight, displayErrorDigits, displayMeanError);
         }
         break;
@@ -1898,10 +1935,9 @@
     const columnsV = 11;
     const predict = (inputs) => {
       if (trainingMethod === "XGBoost" && xgboost) {
-        return xgboost.predict(inputs);
+        return xgboost.run(inputs);
       } else if (nnl instanceof NeuralNetworkList) {
-        const result = nnl.neuralNetworks[0].run(inputs);
-        return result.neurons.map((n) => n.value);
+        return nnl.neuralNetworks[0].run(inputs);
       }
       return [0];
     };
@@ -2496,7 +2532,7 @@
     }
     nnl = new NeuralNetworkList(numOfNeuralNetworks, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
     if (trainingMethod === "XGBoost") {
-      xgboost = new XGBoostEnsemble(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== "Val2in1out" && networkFormat !== "Val1in1Out");
+      xgboost = new XGBoost(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== "Val2in1out" && networkFormat !== "Val1in1Out");
     }
     createTrials();
   }
@@ -2575,7 +2611,7 @@
     topPanelScroll = 0;
     if (trainingMethod === "XGBoost") {
       nnl = new NeuralNetworkList(1, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
-      xgboost = new XGBoostEnsemble(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== "Val2in1out" && networkFormat !== "Val1in1Out");
+      xgboost = new XGBoost(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== "Val2in1out" && networkFormat !== "Val1in1Out");
     } else {
       nnl = new NeuralNetworkList(numOfNeuralNetworks, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
       xgboost = null;
@@ -2591,7 +2627,7 @@
     const newTrainingMethod = document.getElementById("trainingMethod").value;
     if (newTrainingMethod === "XGBoost" && trainingMethod !== "XGBoost") {
       nnl = new NeuralNetworkList(1, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
-      xgboost = new XGBoostEnsemble(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== "Val2in1out" && networkFormat !== "Val1in1Out");
+      xgboost = new XGBoost(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== "Val2in1out" && networkFormat !== "Val1in1Out");
       createTrials();
       numOfNeuralNetworks = 1;
     } else if (newTrainingMethod !== "XGBoost" && trainingMethod === "XGBoost") {
@@ -2729,7 +2765,7 @@
     xgbTrainInputs = createInputs(inputSize, 1, -1, xgbResolution);
     xgbTrainOutputs = xgbTrainInputs.map((inp) => test(inp));
     if (xgboost) {
-      xgboost = new XGBoostEnsemble(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== "Val2in1out" && networkFormat !== "Val1in1Out");
+      xgboost = new XGBoost(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== "Val2in1out" && networkFormat !== "Val1in1Out");
     }
   }
   window.xgbResolutionChange = xgbResolutionChange;
@@ -2770,7 +2806,7 @@
     }
     try {
       if (seed.startsWith("XGBSEED1")) {
-        const ens = XGBoostEnsemble.fromSeed(seed);
+        const ens = XGBoost.fromSeed(seed);
         if (ens.inputSize !== inputSize || ens.outputSize !== outputSize) {
           seedStatus(`seed is ${ens.inputSize}in ${ens.outputSize}out, switch network format`, true);
           return;

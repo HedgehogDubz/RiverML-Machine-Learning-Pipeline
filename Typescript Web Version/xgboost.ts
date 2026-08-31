@@ -1,7 +1,18 @@
-import { DecisionTree, TreeNode } from "./decisiontree.js";
+import { RiverML as Trees } from "./decisiontree.js";
+
+// XGBoost stage of the RiverML pipeline, an ensemble of decision trees trained on residuals.
+// Seed format is shared with the C++ version.
+//
+// Copy this file plus decisiontree.ts anywhere to run a trained model:
+//   const model = new RiverML.XGBoost(seed);
+//   const outputs = model.run([0.5, -0.2]);
+export namespace RiverML {
+
+import DecisionTree = Trees.DecisionTree;
+import TreeNode = Trees.TreeNode;
 
 // XGBoost Ensemble of Decision Trees
-export class XGBoostEnsemble {
+export class XGBoost {
     trees: DecisionTree[] = [];
     generation: number = 0;
     inputSize: number;
@@ -15,8 +26,23 @@ export class XGBoostEnsemble {
     testRMSE: number = 0;
     testMAE: number = 0;
 
-    constructor(inputSize: number, outputSize: number, shrinkage: number = 0.1, maxDepth: number = 4, maxTrees: number = Infinity, isClassification: boolean = false) {
-        this.inputSize = inputSize;
+    // Build an empty ensemble, or build straight from a seed string
+    constructor(seed: string);
+    constructor(inputSize: number, outputSize: number, shrinkage?: number, maxDepth?: number, maxTrees?: number, isClassification?: boolean);
+    constructor(inputSizeOrSeed: number | string, outputSize: number = 1, shrinkage: number = 0.1, maxDepth: number = 4, maxTrees: number = Infinity, isClassification: boolean = false) {
+        if (typeof inputSizeOrSeed === 'string') {
+            const loaded = XGBoost.fromSeed(inputSizeOrSeed);
+            this.inputSize = loaded.inputSize;
+            this.outputSize = loaded.outputSize;
+            this.shrinkage = loaded.shrinkage;
+            this.maxDepth = loaded.maxDepth;
+            this.maxTrees = loaded.maxTrees;
+            this.isClassification = loaded.isClassification;
+            this.trees = loaded.trees;
+            this.generation = loaded.generation;
+            return;
+        }
+        this.inputSize = inputSizeOrSeed;
         this.outputSize = outputSize;
         this.shrinkage = shrinkage;
         this.maxDepth = maxDepth;
@@ -43,7 +69,7 @@ export class XGBoostEnsemble {
             // Calculate residuals from current ensemble
             const residuals: number[][] = [];
             for (let i = 0; i < inputs.length; i++) {
-                const pred = this.predict(inputs[i]);
+                const pred = this.run(inputs[i]);
                 const residual = outputs[i].map((val, idx) => val - pred[idx]);
                 residuals.push(residual);
             }
@@ -62,7 +88,7 @@ export class XGBoostEnsemble {
         // Training errors
         let sqSum = 0, absSum = 0;
         for (let i = 0; i < inputs.length; i++) {
-            const pred = this.predict(inputs[i]);
+            const pred = this.run(inputs[i]);
             for (let j = 0; j < this.outputSize; j++) {
                 const diff = Math.abs(pred[j] - outputs[i][j]);
                 sqSum += diff ** 2;
@@ -76,7 +102,7 @@ export class XGBoostEnsemble {
         if (!testInputs || !testFn) { this.testRMSE = 0; this.testMAE = 0; return; }
         sqSum = 0; absSum = 0;
         for (let i = 0; i < testInputs.length; i++) {
-            const pred = this.predict(testInputs[i]);
+            const pred = this.run(testInputs[i]);
             const expected = testFn(testInputs[i]);
             for (let j = 0; j < this.outputSize; j++) {
                 const diff = Math.abs(pred[j] - expected[j]);
@@ -88,8 +114,8 @@ export class XGBoostEnsemble {
         this.testMAE = absSum / testInputs.length;
     }
 
-    // Predict: Sum predictions from all trees
-    predict(input: number[]): number[] {
+    // Sums every tree, base tree at full weight and the rest scaled by shrinkage
+    run(input: number[]): number[] {
         if (this.trees.length === 0) {
             return new Array(this.outputSize).fill(0);
         }
@@ -120,7 +146,7 @@ export class XGBoostEnsemble {
         return `XGBSEED1|${this.inputSize},${this.outputSize}|${this.shrinkage}|${trees}`;
     }
 
-    static fromSeed(seed: string): XGBoostEnsemble {
+    static fromSeed(seed: string): XGBoost {
         const parts = seed.trim().split('|');
         if (parts.length !== 4 || parts[0] !== 'XGBSEED1') {
             throw new Error('Invalid seed: expected XGBSEED1|sizes|shrinkage|trees');
@@ -131,7 +157,7 @@ export class XGBoostEnsemble {
             throw new Error('Invalid seed: bad sizes or shrinkage');
         }
         const [inputSize, outputSize] = sizes;
-        const ens = new XGBoostEnsemble(inputSize, outputSize, shrinkage, 4, Infinity, outputSize > 1);
+        const ens = new XGBoost(inputSize, outputSize, shrinkage, 4, Infinity, outputSize > 1);
 
         for (const treeStr of parts[3].split(';')) {
             const tokens = treeStr.split(',');
@@ -172,7 +198,7 @@ export class XGBoostEnsemble {
         const cols = Math.min(4, this.trees.length);
         const rows = Math.ceil(this.trees.length / cols);
         const availableHeight = panelHeight - displayHeaderHeight;
-        const cellHeight = Math.max(XGBoostEnsemble.MIN_CELL_HEIGHT, availableHeight / rows);
+        const cellHeight = Math.max(XGBoost.MIN_CELL_HEIGHT, availableHeight / rows);
         return displayHeaderHeight + rows * cellHeight;
     }
 
@@ -242,7 +268,7 @@ export class XGBoostEnsemble {
         const rows = Math.ceil(this.trees.length / cols);
         const cellWidth = width / cols;
         const availableHeight = height - displayHeaderHeight;
-        const cellHeight = Math.max(XGBoostEnsemble.MIN_CELL_HEIGHT, availableHeight / rows);
+        const cellHeight = Math.max(XGBoost.MIN_CELL_HEIGHT, availableHeight / rows);
 
         // Draw each tree in the ensemble (scrolled)
         for (let i = 0; i < this.trees.length; i++) {
@@ -281,3 +307,5 @@ export class XGBoostEnsemble {
         ctx.restore();
     }
 }
+
+} // namespace RiverML

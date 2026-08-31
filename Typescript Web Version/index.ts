@@ -1,5 +1,11 @@
-import { ActivationFunction, NeuralNetwork, NeuralNetworkList } from "./neuralnetwork.js";
-import { XGBoostEnsemble } from "./xgboost.js";
+import { RiverML as Net } from "./neuralnetwork.js";
+import { RiverML as Boost } from "./xgboost.js";
+
+// pull the pipeline classes into scope
+import NeuralNetwork = Net.NeuralNetwork;
+import NeuralNetworkList = Net.NeuralNetworkList;
+import XGBoost = Boost.XGBoost;
+type ActivationFunction = Net.ActivationFunction;
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas?.getContext('2d');
@@ -226,8 +232,8 @@ let outputSize = 1;
 let hiddenLayerSizes = [7, 10, 20, 20, 10, 7];
 let activationFunction: ActivationFunction = 'relu';
 let outputActivationFunction: ActivationFunction = 'tanh';
-let nnl: NeuralNetworkList | XGBoostEnsemble = new NeuralNetworkList(numOfNeuralNetworks, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
-let xgboost: XGBoostEnsemble | null = null;
+let nnl: NeuralNetworkList | XGBoost = new NeuralNetworkList(numOfNeuralNetworks, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
+let xgboost: XGBoost | null = null;
 let lastError = Infinity;
 let topPanelScroll = 0;
 let topPanelMaxScroll = 0;
@@ -305,8 +311,7 @@ function update() {
         // Compute test error for neural network methods
         if (trainingMethod !== 'XGBoost' && nnl instanceof NeuralNetworkList) {
             nnl.computeTestErr((inputs) => {
-                const result = nnl instanceof NeuralNetworkList ? nnl.neuralNetworks[0].run(inputs) : {neurons: [{value: 0}]};
-                return (result as any).neurons.map((n: any) => n.value);
+                return nnl instanceof NeuralNetworkList ? nnl.neuralNetworks[0].run(inputs) : [0];
             });
         }
 
@@ -371,7 +376,7 @@ function update() {
                 topPanelMaxScroll = 0;
                 topPanelScroll = 0;
                 let n = nnl.neuralNetworks[0].clone();
-                n.run(currentInputs);
+                n.forward(currentInputs);
                 n.draw(ctx, 0, contentTop, canvas.width, contentHeight, displayErrorDigits, displayMeanError);
             }
             break;
@@ -402,10 +407,9 @@ function update() {
     // Prediction function wrapper (handles both neural networks and XGBoost)
     const predict = (inputs: number[]): number[] => {
         if (trainingMethod === 'XGBoost' && xgboost) {
-            return xgboost.predict(inputs);
+            return xgboost.run(inputs);
         } else if (nnl instanceof NeuralNetworkList) {
-            const result = nnl.neuralNetworks[0].run(inputs);
-            return result.neurons.map(n => n.value);
+            return nnl.neuralNetworks[0].run(inputs);
         }
         return [0];
     };
@@ -1035,7 +1039,7 @@ function networkChange(){
 
     nnl = new NeuralNetworkList(numOfNeuralNetworks, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
     if (trainingMethod === 'XGBoost') {
-        xgboost = new XGBoostEnsemble(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== 'Val2in1out' && networkFormat !== 'Val1in1Out');
+        xgboost = new XGBoost(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== 'Val2in1out' && networkFormat !== 'Val1in1Out');
     }
     createTrials();
 }
@@ -1118,7 +1122,7 @@ function reset(){
     topPanelScroll = 0;
     if (trainingMethod === 'XGBoost') {
         nnl = new NeuralNetworkList(1, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
-        xgboost = new XGBoostEnsemble(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== 'Val2in1out' && networkFormat !== 'Val1in1Out');
+        xgboost = new XGBoost(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== 'Val2in1out' && networkFormat !== 'Val1in1Out');
     } else {
         nnl = new NeuralNetworkList(numOfNeuralNetworks, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
         xgboost = null;
@@ -1137,7 +1141,7 @@ function trainingMethodChange(){
     if (newTrainingMethod === 'XGBoost' && trainingMethod !== 'XGBoost') {
         // Switching TO XGBoost: create XGBoost ensemble
         nnl = new NeuralNetworkList(1, inputSize, hiddenLayerSizes, outputSize, activationFunction, outputActivationFunction);
-        xgboost = new XGBoostEnsemble(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== 'Val2in1out' && networkFormat !== 'Val1in1Out');
+        xgboost = new XGBoost(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== 'Val2in1out' && networkFormat !== 'Val1in1Out');
         createTrials();
         numOfNeuralNetworks = 1;
     } else if (newTrainingMethod !== 'XGBoost' && trainingMethod === 'XGBoost') {
@@ -1285,7 +1289,7 @@ function xgbResolutionChange() {
     xgbTrainInputs = createInputs(inputSize, 1, -1, xgbResolution);
     xgbTrainOutputs = xgbTrainInputs.map(inp => test(inp));
     if (xgboost) {
-        xgboost = new XGBoostEnsemble(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== 'Val2in1out' && networkFormat !== 'Val1in1Out');
+        xgboost = new XGBoost(inputSize, outputSize, xgbShrinkage, xgbMaxDepth, xgbMaxTrees, networkFormat !== 'Val2in1out' && networkFormat !== 'Val1in1Out');
     }
 }
 (window as any).xgbResolutionChange = xgbResolutionChange;
@@ -1335,7 +1339,7 @@ function loadSeed(){
     }
     try {
         if (seed.startsWith('XGBSEED1')) {
-            const ens = XGBoostEnsemble.fromSeed(seed);
+            const ens = XGBoost.fromSeed(seed);
             if (ens.inputSize !== inputSize || ens.outputSize !== outputSize) {
                 seedStatus(`seed is ${ens.inputSize}in ${ens.outputSize}out, switch network format`, true);
                 return;

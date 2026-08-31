@@ -16,7 +16,15 @@ npm run dev
 
 Seeds are compatible with the C++ desktop version in both directions.
 
-`neural_network_by_seed.ts` and `xgboost_by_seed.ts` are standalone. Copy either file anywhere and call `neuralNetworkBySeed(seed, inputs)` or `xgboostBySeed(seed, inputs)` to run a trained model without any of the other files.
+`neural_network_by_seed.ts` and `xgboost_by_seed.ts` are standalone. Copy either file anywhere to run a trained model without any of the other files. Both live in a `RiverML` namespace and parse the seed once in the constructor, so repeated predictions stay fast:
+
+```ts
+const nn = new RiverML.NeuralNetwork(seed);
+const outputs = nn.run([0.5, -0.2]);
+
+const model = new RiverML.XGBoost(seed);
+const outputs2 = model.run([0.5, -0.2]);
+```
 
 ## Architecture controls
 

@@ -1,5 +1,9 @@
-// XGBoost style ensemble of decision trees, trained on residuals.
+// XGBoost stage of the RiverML pipeline, an ensemble of decision trees trained on residuals.
 // Seed format is shared with the TypeScript version.
+//
+// Copy this header plus decisiontree.h anywhere to run a trained model:
+//   RiverML::XGBoost model(seed);
+//   std::vector<double> outputs = model.run({0.5, -0.2});
 #pragma once
 
 #include "decisiontree.h"
@@ -7,9 +11,13 @@
 #include <climits>
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 
-struct XGBoostEnsemble {
+namespace RiverML {
+
+struct XGBoost {
     std::vector<DecisionTree> trees;
     int generation = 0;
     int inputSize = 2;
@@ -19,6 +27,13 @@ struct XGBoostEnsemble {
     int maxTrees = INT_MAX;
     double trainRMSE = 0, trainMAE = 0, testRMSE = 0, testMAE = 0;
 
+    XGBoost() {}
+
+    // Builds straight from a seed, throws std::runtime_error if the seed is malformed
+    explicit XGBoost(const std::string& seed) {
+        if (!fromSeed(seed, *this)) throw std::runtime_error("Invalid seed");
+    }
+
     void reset(int inSize, int outSize) {
         trees.clear();
         generation = 0;
@@ -27,7 +42,7 @@ struct XGBoostEnsemble {
         trainRMSE = trainMAE = testRMSE = testMAE = 0;
     }
 
-    std::vector<double> predict(const std::vector<double>& input) const {
+    std::vector<double> run(const std::vector<double>& input) const {
         std::vector<double> result(outputSize, 0.0);
         for (size_t t = 0; t < trees.size(); t++) {
             const std::vector<double>& pred = trees[t].predict(input);
@@ -58,7 +73,7 @@ struct XGBoostEnsemble {
         if ((int)trees.size() < maxTrees) {
             std::vector<std::vector<double>> residuals(inputs.size());
             for (size_t i = 0; i < inputs.size(); i++) {
-                std::vector<double> pred = predict(inputs[i]);
+                std::vector<double> pred = run(inputs[i]);
                 residuals[i].resize(outputSize);
                 for (int j = 0; j < outputSize; j++) residuals[i][j] = outputs[i][j] - pred[j];
             }
@@ -79,7 +94,7 @@ struct XGBoostEnsemble {
                        const std::vector<std::vector<double>>& testOutputs) {
         double sqSum = 0, absSum = 0;
         for (size_t i = 0; i < inputs.size(); i++) {
-            std::vector<double> pred = predict(inputs[i]);
+            std::vector<double> pred = run(inputs[i]);
             for (int j = 0; j < outputSize; j++) {
                 double diff = std::fabs(pred[j] - outputs[i][j]);
                 sqSum += diff * diff;
@@ -92,7 +107,7 @@ struct XGBoostEnsemble {
         if (testInputs.empty()) { testRMSE = 0; testMAE = 0; return; }
         sqSum = 0; absSum = 0;
         for (size_t i = 0; i < testInputs.size(); i++) {
-            std::vector<double> pred = predict(testInputs[i]);
+            std::vector<double> pred = run(testInputs[i]);
             for (int j = 0; j < outputSize; j++) {
                 double diff = std::fabs(pred[j] - testOutputs[i][j]);
                 sqSum += diff * diff;
@@ -118,42 +133,38 @@ struct XGBoostEnsemble {
         return s;
     }
 
-    static bool fromSeed(const std::string& seed, XGBoostEnsemble& out) {
-        std::vector<std::string> parts;
-        size_t start = 0;
-        while (true) {
-            size_t bar = seed.find('|', start);
-            if (bar == std::string::npos) { parts.push_back(seed.substr(start)); break; }
-            parts.push_back(seed.substr(start, bar - start));
-            start = bar + 1;
-        }
-        if (parts.size() != 4 || parts[0] != "XGBSEED1") return false;
+    // Uses string views so the tree block, which can be over a hundred thousand
+    // characters, is never copied.
+    static bool fromSeed(const std::string& seed, XGBoost& out) {
+        std::string_view sv(seed);
+        size_t b1 = sv.find('|');
+        size_t b2 = b1 == sv.npos ? sv.npos : sv.find('|', b1 + 1);
+        size_t b3 = b2 == sv.npos ? sv.npos : sv.find('|', b2 + 1);
+        if (b3 == sv.npos || sv.substr(0, b1) != "XGBSEED1") return false;
 
         char* end;
-        int inSize = (int)strtol(parts[1].c_str(), &end, 10);
+        int inSize = (int)strtol(seed.c_str() + b1 + 1, &end, 10);
         if (*end != ',') return false;
         int outSize = (int)strtol(end + 1, &end, 10);
-        if (*end != '\0' || inSize <= 0 || outSize <= 0) return false;
-        double shrink = strtod(parts[2].c_str(), &end);
-        if (end == parts[2].c_str()) return false;
+        if (end != seed.c_str() + b2 || inSize <= 0 || outSize <= 0) return false;
+        const char* shrinkStart = seed.c_str() + b2 + 1;
+        double shrink = strtod(shrinkStart, &end);
+        if (end == shrinkStart) return false;
 
         out.reset(inSize, outSize);
         out.shrinkage = shrink;
 
-        // split trees on ';', parse each preorder
-        std::string& treesStr = parts[3];
-        size_t pos = 0;
-        while (pos <= treesStr.size()) {
-            size_t semi = treesStr.find(';', pos);
-            std::string treeStr = treesStr.substr(pos, semi == std::string::npos ? std::string::npos : semi - pos);
+        // parse each tree in place, they are separated by ';'
+        const char* p = seed.c_str() + b3 + 1;
+        while (true) {
             DecisionTree tree;
             tree.inputSize = inSize;
             tree.outputSize = outSize;
-            const char* p = treeStr.c_str();
-            if (parseNode(tree, p, outSize) < 0 || *p != '\0') return false;
+            if (parseNode(tree, p, outSize) < 0) return false;
             out.trees.push_back(std::move(tree));
-            if (semi == std::string::npos) break;
-            pos = semi + 1;
+            if (*p == ';') { p++; continue; }
+            if (*p == '\0' || *p == '\n' || *p == '\r') break;
+            return false;
         }
         out.generation = (int)out.trees.size();
         return !out.trees.empty();
@@ -214,3 +225,5 @@ private:
         return me;
     }
 };
+
+} // namespace RiverML

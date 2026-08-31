@@ -1,5 +1,9 @@
-// Neural network engine for the desktop visualizer.
+// Neural network stage of the RiverML pipeline.
 // Flat vectors per layer for speed. Seed format is shared with the TypeScript version.
+//
+// This header is standalone, copy it anywhere to run a trained model:
+//   RiverML::NeuralNetwork nn(seed);
+//   std::vector<double> outputs = nn.run({0.5, -0.2});
 #pragma once
 
 #include <algorithm>
@@ -7,8 +11,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <random>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
+
+namespace RiverML {
 
 enum class Activation { ReLU, Sigmoid, Tanh };
 
@@ -20,7 +28,7 @@ inline const char* activationName(Activation a) {
     }
 }
 
-inline bool activationFromName(const std::string& s, Activation& out) {
+inline bool activationFromName(std::string_view s, Activation& out) {
     if (s == "relu") { out = Activation::ReLU; return true; }
     if (s == "sigmoid") { out = Activation::Sigmoid; return true; }
     if (s == "tanh") { out = Activation::Tanh; return true; }
@@ -60,6 +68,12 @@ struct NeuralNetwork {
     double meanError = 0;
 
     NeuralNetwork() {}
+
+    // Builds straight from a seed, throws std::runtime_error if the seed is malformed
+    explicit NeuralNetwork(const std::string& seed) {
+        if (!parseSeed(seed)) throw std::runtime_error("Invalid seed");
+    }
+
     NeuralNetwork(int inputSize, const std::vector<int>& hidden, int outputSize,
                   Activation activation, Activation outputActivation) {
         act = activation;
@@ -250,40 +264,42 @@ struct NeuralNetwork {
     }
 
     static bool fromSeed(const std::string& seed, NeuralNetwork& out) {
-        // split into 5 fields
-        std::vector<std::string> parts;
-        size_t start = 0;
-        while (true) {
-            size_t bar = seed.find('|', start);
-            if (bar == std::string::npos) { parts.push_back(seed.substr(start)); break; }
-            parts.push_back(seed.substr(start, bar - start));
-            start = bar + 1;
-        }
-        if (parts.size() != 5 || parts[0] != "NNSEED1") return false;
+        return out.parseSeed(seed);
+    }
+
+private:
+    // Parses a seed into this network. Uses string views so the parameter block,
+    // which can be tens of thousands of characters, is never copied.
+    bool parseSeed(const std::string& seed) {
+        std::string_view sv(seed);
+        size_t b1 = sv.find('|');
+        size_t b2 = b1 == sv.npos ? sv.npos : sv.find('|', b1 + 1);
+        size_t b3 = b2 == sv.npos ? sv.npos : sv.find('|', b2 + 1);
+        size_t b4 = b3 == sv.npos ? sv.npos : sv.find('|', b3 + 1);
+        if (b4 == sv.npos || sv.substr(0, b1) != "NNSEED1") return false;
 
         Activation a, oa;
-        if (!activationFromName(parts[1], a) || !activationFromName(parts[2], oa)) return false;
+        if (!activationFromName(sv.substr(b1 + 1, b2 - b1 - 1), a)) return false;
+        if (!activationFromName(sv.substr(b2 + 1, b3 - b2 - 1), oa)) return false;
 
-        std::vector<int> sizes;
-        {
-            const char* p = parts[3].c_str();
-            char* end;
-            while (*p) {
-                long v = strtol(p, &end, 10);
-                if (end == p || v <= 0) return false;
-                sizes.push_back((int)v);
-                p = *end == ',' ? end + 1 : end;
-            }
-        }
-        if (sizes.size() < 2) return false;
-
-        std::vector<int> hidden(sizes.begin() + 1, sizes.end() - 1);
-        out = NeuralNetwork(sizes.front(), hidden, sizes.back(), a, oa);
-
-        const char* p = parts[4].c_str();
+        std::vector<int> parsedSizes;
+        const char* p = seed.c_str() + b3 + 1;
+        const char* sizesEnd = seed.c_str() + b4;
         char* end;
-        for (int l = 1; l < out.numLayers(); l++) {
-            Layer& L = out.layers[l];
+        while (p < sizesEnd) {
+            long v = strtol(p, &end, 10);
+            if (end == p || v <= 0) return false;
+            parsedSizes.push_back((int)v);
+            p = *end == ',' ? end + 1 : end;
+        }
+        if (parsedSizes.size() < 2) return false;
+
+        std::vector<int> hidden(parsedSizes.begin() + 1, parsedSizes.end() - 1);
+        *this = NeuralNetwork(parsedSizes.front(), hidden, parsedSizes.back(), a, oa);
+
+        p = seed.c_str() + b4 + 1;
+        for (int l = 1; l < numLayers(); l++) {
+            Layer& L = layers[l];
             for (int n = 0; n < L.size; n++) {
                 L.biases[n] = strtod(p, &end);
                 if (end == p) return false;
@@ -348,8 +364,7 @@ struct Population {
     }
 
     void sortByError() {
-        std::sort(nets.begin(), nets.end(),
-                  [](const NeuralNetwork& a, const NeuralNetwork& b) { return a.error < b.error; });
+        std::ranges::sort(nets, {}, &NeuralNetwork::error);
     }
 
     double runGeneration(int numWeights, double weightStrength, int numBiases, double biasStrength) {
@@ -409,3 +424,5 @@ struct Population {
         testMAE = absSum / (double)testInputs.size();
     }
 };
+
+} // namespace RiverML

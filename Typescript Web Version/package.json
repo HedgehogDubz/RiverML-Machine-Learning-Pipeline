@@ -2,7 +2,7 @@
   "dependencies": {
     "typescript": "^5.9.3"
   },
-  "name": "machine-learning-visualizer",
+  "name": "riverml-machine-learning-pipeline",
   "version": "1.0.0",
   "main": "index.js",
   "devDependencies": {
@@ -26,5 +26,5 @@
     "url": "https://github.com/HedgehogDubz/Machine-Learning-Visualizer/issues"
   },
   "homepage": "https://github.com/HedgehogDubz/Machine-Learning-Visualizer#readme",
-  "description": ""
+  "description": "RiverML machine learning pipeline, web front end"
 }

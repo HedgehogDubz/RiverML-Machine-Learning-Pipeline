@@ -1,4 +1,20 @@
-import { drawCircle, Point } from './graphics.js';
+// Neural network stage of the RiverML pipeline.
+// Seed format is shared with the C++ version.
+//
+// This file is standalone, copy it anywhere to run a trained model:
+//   const nn = new RiverML.NeuralNetwork(seed);
+//   const outputs = nn.run([0.5, -0.2]);
+export namespace RiverML {
+
+type Point = { x: number; y: number };
+
+function drawCircle(ctx: CanvasRenderingContext2D, position: Point, radius: number): void {
+    if (radius <= 0) { return; }
+    ctx.beginPath();
+    ctx.arc(position.x, position.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+}
+
 ////////////////////////////////////////Neural Network List///////////////////////////////////////
 export class NeuralNetworkList {
     numOfNeuralNetworks = 0;
@@ -29,7 +45,7 @@ export class NeuralNetworkList {
         
     }
     public run(inputs: number []){
-        this.neuralNetworks.forEach(nn => nn.run(inputs));
+        this.neuralNetworks.forEach(nn => nn.forward(inputs));
     }
     public mutate(numOfWeights:number, weightStrength:number, numOfBiases:number, biasesStrength:number){
         this.neuralNetworks.forEach(nn => nn.mutate(numOfWeights,weightStrength, numOfBiases, biasesStrength));
@@ -226,7 +242,7 @@ export class NeuralNetworkList {
         const p = power || 2;
         this.neuralNetworks.forEach((nn: NeuralNetwork) => {
             for (let i = 0; i < inputsList.length; i++){
-                nn.run(inputsList[i]);
+                nn.forward(inputsList[i]);
                 nn.testError(outputsList[i], true, p);
             }
             nn.error = (nn.error / inputsList.length) ** (1 / p);
@@ -313,7 +329,7 @@ export class NeuralNetworkList {
         this._backpropWorker.error = 0;
         this._backpropWorker.meanError = 0;
         for (let i = 0; i < this.trialInputsList.length; i++) {
-            this._backpropWorker.run(this.trialInputsList[i]);
+            this._backpropWorker.forward(this.trialInputsList[i]);
             this._backpropWorker.testError(this.trialOutputsList[i], true, this.trialPower);
         }
         this._backpropWorker.error = (this._backpropWorker.error / this.trialInputsList.length) ** (1 / this.trialPower);
@@ -392,7 +408,7 @@ export class NeuralNetworkList {
         for (const nn of this.neuralNetworks) {
             const result = nn.run(inputs);
             for (let i = 0; i < this.outputSize; i++) {
-                output[i] += result.neurons[i].value;
+                output[i] += result[i];
             }
         }
 
@@ -405,20 +421,17 @@ export class NeuralNetworkList {
         const ensemble = this.neuralNetworks[0].clone();
 
         // Override the run method to use ensemble prediction
-        const originalRun = ensemble.run.bind(ensemble);
+        const originalForward = ensemble.forward.bind(ensemble);
         ensemble.run = (inputs: number[]) => {
-            // Get ensemble prediction
-            const ensembleOutput = this.runEnsemble(inputs);
-
             // Run the network normally first to set up the structure
-            originalRun(inputs);
+            originalForward(inputs);
 
-            // Override output values with ensemble prediction
+            // Override output values with the ensemble prediction
+            const ensembleOutput = this.runEnsemble(inputs);
             for (let i = 0; i < ensembleOutput.length; i++) {
                 ensemble.getOutputLayer().neurons[i].value = ensembleOutput[i];
             }
-
-            return ensemble.getOutputLayer();
+            return ensembleOutput;
         };
 
         return ensemble;
@@ -472,17 +485,61 @@ export class NeuralNetwork {
     // For backpropagation
     learningRate: number = 0.01; // Default learning rate (adjustable via UI)
     momentum: number = 0.9; // Default momentum (adjustable via UI)
-    constructor(inputSize: number, hiddenLayerSizes: number[], outputSize: number, activationFunction: ActivationFunction, outputActivationFunction:ActivationFunction) {
-        this.numOfLayers = hiddenLayerSizes.length + 2;
-        this.inputSize = inputSize
-        this.hiddenLayerSizes = hiddenLayerSizes;
-        this.outputSize = outputSize;
+    // Build a fresh random network, or build straight from a seed string
+    constructor(seed: string);
+    constructor(inputSize: number, hiddenLayerSizes: number[], outputSize: number, activationFunction: ActivationFunction, outputActivationFunction: ActivationFunction);
+    constructor(inputSizeOrSeed: number | string, hiddenLayerSizes?: number[], outputSize?: number, activationFunction?: ActivationFunction, outputActivationFunction?: ActivationFunction) {
+        if (typeof inputSizeOrSeed === 'string') {
+            const parts = inputSizeOrSeed.trim().split('|');
+            if (parts.length !== 5 || parts[0] !== 'NNSEED1') {
+                throw new Error('Invalid seed: expected NNSEED1|act|outAct|sizes|params');
+            }
+            const sizes = parts[3].split(',').map(Number);
+            if (sizes.length < 2 || sizes.some(s => !(s > 0))) {
+                throw new Error('Invalid seed: bad layer sizes');
+            }
+            this.numOfLayers = sizes.length;
+            this.inputSize = sizes[0];
+            this.hiddenLayerSizes = sizes.slice(1, -1);
+            this.outputSize = sizes[sizes.length - 1];
+            this.activationFunction = parts[1] as ActivationFunction;
+            this.outputActivationFunction = parts[2] as ActivationFunction;
+            this.initLayers();
+
+            // params: for each layer after the input, per neuron: bias then weights
+            const params = parts[4].split(',');
+            let p = 0;
+            for (let l = 1; l < this.numOfLayers; l++) {
+                for (const neuron of this.layers[l].neurons) {
+                    neuron.bias = Number(params[p++]);
+                    for (const w of neuron.weights) w.value = Number(params[p++]);
+                }
+            }
+            if (p !== params.length || params.some(v => isNaN(Number(v)))) {
+                throw new Error('Invalid seed: wrong number of parameters');
+            }
+            return;
+        }
+        this.numOfLayers = hiddenLayerSizes!.length + 2;
+        this.inputSize = inputSizeOrSeed;
+        this.hiddenLayerSizes = hiddenLayerSizes!;
+        this.outputSize = outputSize!;
         // Assign before initLayers so neurons get the right activation
-        this.activationFunction = activationFunction;
-        this.outputActivationFunction = outputActivationFunction;
+        this.activationFunction = activationFunction!;
+        this.outputActivationFunction = outputActivationFunction!;
         this.initLayers();
     }
-    public run(inputs: number[]) {
+    // Forward pass returning just the output values
+    public run(inputs: number[]): number[] {
+        this.forward(inputs);
+        const outputs = this.getOutputLayer().neurons;
+        const values = new Array(outputs.length);
+        for (let i = 0; i < outputs.length; i++) values[i] = outputs[i].value;
+        return values;
+    }
+
+    // Forward pass that only fills the layers, used by training and drawing
+    public forward(inputs: number[]) {
         if (inputs.length != this.inputSize) {
             throw new Error('Wrong Number of INPUTs, Expected: ' + this.inputSize + "| Received: " + inputs.length)
         }
@@ -664,7 +721,7 @@ export class NeuralNetwork {
         }
 
         for (let i = 0; i < inputs.length; i++) {
-            this.run(inputs[i]);
+            this.forward(inputs[i]);
             this.backPropogate(targetOutputs[i], i === 0);
         }
 
@@ -742,28 +799,7 @@ export class NeuralNetwork {
     }
 
     public static fromSeed(seed: string): NeuralNetwork {
-        const parts = seed.trim().split('|');
-        if (parts.length !== 5 || parts[0] !== 'NNSEED1') {
-            throw new Error('Invalid seed: expected NNSEED1|act|outAct|sizes|params');
-        }
-        const activation = parts[1] as ActivationFunction;
-        const outputActivation = parts[2] as ActivationFunction;
-        const sizes = parts[3].split(',').map(Number);
-        const params = parts[4].split(',').map(Number);
-        const nn = new NeuralNetwork(sizes[0], sizes.slice(1, -1), sizes[sizes.length - 1], activation, outputActivation);
-        let p = 0;
-        for (let l = 1; l < nn.numOfLayers; l++) {
-            for (const neuron of nn.layers[l].neurons) {
-                neuron.bias = params[p++];
-                for (const w of neuron.weights) {
-                    w.value = params[p++];
-                }
-            }
-        }
-        if (p !== params.length || params.some(isNaN)) {
-            throw new Error('Invalid seed: wrong number of parameters');
-        }
-        return nn;
+        return new NeuralNetwork(seed);
     }
 
     private initLayers(): void {
@@ -1017,7 +1053,7 @@ export class NeuralNetwork {
         this.displayGrid2Input1Output(ctx, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders,
             (input1, input2) => {
                 let val = this.run([input1, input2]);
-                return val.neurons[0].value - test([input1, input2])[0];
+                return val[0] - test([input1, input2])[0];
             },
             (cellValue) => cellValue * errorRange
         );
@@ -1032,7 +1068,7 @@ export class NeuralNetwork {
 
     public display2Input1Output(ctx, left: number, top: number, width:number, height:number, axis1low: number, axis2low: number, axis1high: number, axis2high: number, ouputMiddle:number, outputRange: number, rows:number, columns: number, decimals: number, showText: boolean, showHeaders: boolean){
         this.displayGrid2Input1Output(ctx, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders,
-            (input1, input2) => this.run([input1, input2]).neurons[0].value,
+            (input1, input2) => this.run([input1, input2])[0],
             (cellValue) => cellValue * outputRange - ouputMiddle
         );
     }
@@ -1161,7 +1197,7 @@ export class NeuralNetwork {
         this.displayGrid2Input2Output(ctx, left, top, width, height, axis1low, axis2low, axis1high, axis2high, rows, columns, decimals, showText, showHeaders, color1, color2,
             (input1, input2) => {
                 let result = this.run([input1, input2]);
-                return [result.neurons[0].value, result.neurons[1].value];
+                return [result[0], result[1]];
             }
         );
     }
@@ -1181,8 +1217,8 @@ export class NeuralNetwork {
             (input1, input2) => {
                 let nnOutput = this.run([input1, input2]);
                 let testOutput = test([input1, input2]);
-                let error0 = Math.abs(nnOutput.neurons[0].value - testOutput[0]);
-                let error1 = Math.abs(nnOutput.neurons[1].value - testOutput[1]);
+                let error0 = Math.abs(nnOutput[0] - testOutput[0]);
+                let error1 = Math.abs(nnOutput[1] - testOutput[1]);
                 // Calculate total error (sum of both output errors)
                 let totalError = (error0 + error1) / 2; // Average error
                 // Return total error as both outputs for color interpolation
@@ -1266,3 +1302,5 @@ class NeuronPosition {
 }
 
 
+
+} // namespace RiverML
