@@ -711,8 +711,8 @@ static void copySeed() {
         seed = gXgb.toSeed();
     } else {
         // re-measure first, new networks carry a stale error of 0 and would sort to the front
-        for (auto& nn : gPop.nets) gPop.measure(nn);
-        gPop.sortByError();
+        for (auto& nn : gPop.nets) gPop.testErrorTrials(nn);
+        gPop.sort();
         seed = gPop.nets[0].toSeed();
     }
     SetClipboardText(seed.c_str());
@@ -802,7 +802,7 @@ int main() {
                             gBiasStrength = fmin(1.0, gBiasStrength * 1.001);
                         }
                     } else {
-                        best = gPop.trainBackprop(gLearningRate, gMomentum);
+                        best = gPop.trainBackpropagation(gLearningRate, gMomentum);
                     }
                     gLastError = best;
                 }
@@ -898,8 +898,8 @@ int main() {
                     gTreeViewIdx = 0;
                 } else if (old != gMethod) {
                     // keep the best network when switching between network methods
-                    for (auto& nn : gPop.nets) gPop.measure(nn);
-                    gPop.sortByError();
+                    for (auto& nn : gPop.nets) gPop.testErrorTrials(nn);
+                    gPop.sort();
                     NeuralNetwork best = gPop.nets[0];
                     int count = gMethod == TrainMethod::Genetic ? 16 : 1;
                     gPop.nets.assign(count, best);

@@ -155,7 +155,7 @@ struct NeuralNetwork {
         }
     }
 
-    void addError(const std::vector<double>& targets, double power) {
+    void testError(const std::vector<double>& targets, double power) {
         double sum = 0, meanSum = 0;
         const std::vector<double>& out = layers.back().values;
         for (int i = 0; i < outputSize(); i++) {
@@ -351,25 +351,25 @@ struct NeuralNetworkList {
         workerBestError = 1e300;
     }
 
-    void measure(NeuralNetwork& nn) {
+    void testErrorTrials(NeuralNetwork& nn) {
         nn.error = 0;
         nn.meanError = 0;
         for (size_t i = 0; i < trialInputs.size(); i++) {
             nn.run(trialInputs[i]);
-            nn.addError(trialOutputs[i], trialPower);
+            nn.testError(trialOutputs[i], trialPower);
         }
         nn.error = std::pow(nn.error / (double)trialInputs.size(), 1.0 / trialPower);
         nn.meanError /= (double)trialInputs.size();
     }
 
-    void sortByError() {
+    void sort() {
         std::ranges::sort(nets, {}, &NeuralNetwork::error);
     }
 
     double runGeneration(int numWeights, double weightStrength, int numBiases, double biasStrength) {
         generation++;
-        for (auto& nn : nets) measure(nn);
-        sortByError();
+        for (auto& nn : nets) testErrorTrials(nn);
+        sort();
         double best = nets[0].error;
         trainRMSE = best;
         trainMAE = nets[0].meanError;
@@ -389,7 +389,7 @@ struct NeuralNetworkList {
         return best;
     }
 
-    double trainBackprop(double learningRate, double momentum) {
+    double trainBackpropagation(double learningRate, double momentum) {
         generation++;
         if (!hasWorker) {
             worker = nets[0];
@@ -397,7 +397,7 @@ struct NeuralNetworkList {
             workerBestError = 1e300;
         }
         worker.trainBatch(trialInputs, trialOutputs, learningRate, momentum);
-        measure(worker);
+        testErrorTrials(worker);
         if (worker.error < workerBestError) {
             workerBestError = worker.error;
             nets[0] = worker;

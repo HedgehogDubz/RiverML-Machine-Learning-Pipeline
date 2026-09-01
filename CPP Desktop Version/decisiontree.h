@@ -30,7 +30,7 @@ struct DecisionTree {
         nodes.clear();
         std::vector<int> idx(inputs.size());
         std::iota(idx.begin(), idx.end(), 0);
-        build(inputs, outputs, idx, 0);
+        buildTree(inputs, outputs, idx, 0);
     }
 
     const std::vector<double>& predict(const std::vector<double>& input) const {
@@ -54,7 +54,7 @@ struct DecisionTree {
     }
 
 private:
-    std::vector<double> meanOf(const std::vector<std::vector<double>>& outputs,
+    std::vector<double> calculateMean(const std::vector<std::vector<double>>& outputs,
                                const std::vector<int>& idx) const {
         std::vector<double> mean(outputSize, 0.0);
         if (idx.empty()) return mean;
@@ -65,14 +65,14 @@ private:
     }
 
     // returns the new node's index
-    int build(const std::vector<std::vector<double>>& X,
+    int buildTree(const std::vector<std::vector<double>>& X,
               const std::vector<std::vector<double>>& Y,
               std::vector<int>& idx, int depth) {
         int me = (int)nodes.size();
         nodes.push_back(TreeNode());
 
         if (depth >= maxDepth || (int)idx.size() < minSamplesLeaf) {
-            nodes[me].value = meanOf(Y, idx);
+            nodes[me].value = calculateMean(Y, idx);
             return me;
         }
 
@@ -122,7 +122,7 @@ private:
         }
 
         if (bestFeature < 0) {
-            nodes[me].value = meanOf(Y, idx);
+            nodes[me].value = calculateMean(Y, idx);
             return me;
         }
 
@@ -134,8 +134,8 @@ private:
 
         nodes[me].feature = bestFeature;
         nodes[me].threshold = bestThreshold;
-        int L = build(X, Y, leftIdx, depth + 1);
-        int R = build(X, Y, rightIdx, depth + 1);
+        int L = buildTree(X, Y, leftIdx, depth + 1);
+        int R = buildTree(X, Y, rightIdx, depth + 1);
         nodes[me].left = L;
         nodes[me].right = R;
         return me;
