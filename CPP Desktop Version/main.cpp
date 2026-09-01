@@ -55,7 +55,7 @@ static double gWeightStrength = 0.01;
 static double gBiasStrength = 0.01;
 static double gLastError = 1e300;
 
-static Population gPop;
+static NeuralNetworkList gPop;
 static int gInputSize = 2;
 static int gOutputSize = 1;
 static std::vector<int> gHidden = { 7, 10, 20, 20, 10, 7 };
@@ -84,6 +84,7 @@ static double gStatusUntil = 0;
 static const Color kColor1 = { 100, 150, 255, 255 };
 static const Color kColor2 = { 255, 100, 100, 255 };
 static const Color kAccent = { 102, 110, 234, 255 };
+static const char* kRepoURL = "https://github.com/HedgehogDubz/Machine-Learning-Visualizer";
 
 //////////////////// test functions ////////////////////
 
@@ -823,6 +824,17 @@ int main() {
         //////////////////// sidebar ////////////////////
         DrawRectangle(0, 0, (int)sidebarW, (int)H, Color{ 242, 242, 247, 255 });
         DrawText("Controls", 15, 12, 20, kAccent);
+        { // GitHub link, top right of the sidebar
+            const char* link = "GitHub";
+            int lw = MeasureText(link, 11);
+            Rectangle linkRect = { sidebarW - 15 - lw, 16, (float)lw, 14 };
+            bool hover = CheckCollisionPointRec(GetMousePosition(), linkRect);
+            Color c = hover ? kAccent : GRAY;
+            DrawText(link, (int)linkRect.x, (int)linkRect.y, 11, c);
+            DrawLine((int)linkRect.x, (int)linkRect.y + 12, (int)linkRect.x + lw, (int)linkRect.y + 12, c);
+            SetMouseCursor(hover ? MOUSE_CURSOR_POINTING_HAND : MOUSE_CURSOR_DEFAULT);
+            if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) OpenURL(kRepoURL);
+        }
         float y = 45;
         float cw = sidebarW - 30;
         char lbl[64];

@@ -316,7 +316,7 @@ private:
     }
 };
 
-struct Population {
+struct NeuralNetworkList {
     int targetCount = 16;
     std::vector<NeuralNetwork> nets;
     int generation = 0;

@@ -34,6 +34,26 @@
             color: #667eea;
         }
 
+        .sidebar-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .repo-link {
+            font-size: 0.75rem;
+            color: #667eea;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(102, 126, 234, 0.4);
+            flex-shrink: 0;
+        }
+
+        .repo-link:hover {
+            color: #4c5bd4;
+            border-bottom-color: #4c5bd4;
+        }
+
         .control-group {
             display: flex;
             flex-direction: column;
