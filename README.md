@@ -54,12 +54,13 @@ build does not implement yet. This is the version deployed to GitHub Pages.
 
 ---
 
-## Seeds, the handoff between stages
+## Using the Seeds
 
 A seed is the entire trained model as one line of text. Copy Seed puts it on the clipboard and in the
 seed box; Load Seed reads whatever is pasted in that box and switches the training method to match the
 seed type automatically.
 
+Structure:
 - `NNSEED1|activation|outputActivation|layerSizes|params` for neural networks
 - `XGBSEED1|inputSize,outputSize|shrinkage|trees` for XGBoost
 
