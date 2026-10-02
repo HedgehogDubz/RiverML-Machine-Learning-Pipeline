@@ -1,16 +1,15 @@
 # RiverML-Machine-Learning-Pipeline
 
-RiverML is a lightweight machine learning pipeline you can quickly train, export, and run live inside your code. Watch in real-time as your model trains, export the trained model as a single seed string, and load that seed anywhere else in the pipeline to make predictions in any application!
+RiverML is a lightweight machine learning pipeline you can quickly train, export, and run live inside your code. Watch in real time as your model trains, export the trained model as a single seed string, and load that seed anywhere else in the pipeline to make predictions in any application!
 
 The pipeline has three stages:
 
-1. **Train** in either the C++ desktop app or the TypeScript web app run on Github Pages.
+1. **Train** in either the C++ desktop app or the TypeScript web app run on GitHub Pages.
 https://hedgehogdubz.github.io/Machine-Learning-Visualizer/
 2. **Export** the trained model as a seed string with Copy Seed.
-3. **Run** that seed in any RiverML target, in either language (C++, Typescript)
+3. **Run** that seed in any RiverML target, in either language (C++, TypeScript)
 
-Both languages implement the same `RiverML` namespace, the same models, and the same seed format,
-so a model trained in one stage runs unchanged in the other.
+Seeds and Models work Cross-language. (e.g a saved seed from C++ will work the same in TypeScript and vice versa)
 
 ---
 
@@ -29,18 +28,18 @@ Built with C++23. What it gives you:
 - Model view on top: the network with bias rings, value fills, and green/red weight lines, or the
   XGBoost decision trees with the live prediction path highlighted in red
 - Data view below: a fine gradient of the model output over the input space, plus an 11x11 grid of
-  actual values, or a line graph for the 1 input format
+  actual values, or a line graph for the 1-input format
 - Training methods: genetic, backpropagation, and XGBoost
-- Editable architecture: activation functions and a comma list of hidden layer sizes such as `5,8,5`
+- Editable architecture: activation functions and a comma-separated list of hidden layer sizes such as `5,8,5`
 - Copy Seed and Load Seed with a seed box, plus a `seed.txt` written next to the binary
 
 Those timings use the default network, `2 -> 7 -> 10 -> 20 -> 20 -> 10 -> 7 -> 1`, which is 77 nodes and
 961 connections. Each generation scores all 16 networks against the training grid: 21 x 21 input points
-spanning -1 to 1 on both axes, so 441 points per network, 6.8 million multiply adds per generation.
+spanning -1 to 1 on both axes, so 441 points per network, 6.8 million multiply-adds per generation.
 
 Everything lives in three headers: `neuralnetwork.h`, `xgboost.h`, and `decisiontree.h`.
 
-## Typescript Web Version
+## TypeScript Web Version
 
 The shareable end of the pipeline. Runs entirely in the browser.
 
@@ -49,7 +48,7 @@ npm install
 npm run dev
 ```
 
-Same models and controls as the desktop build, plus the N class categorical format that the desktop
+Same models and controls as the desktop build, plus the N-class categorical format that the desktop
 build does not implement yet. This is the version deployed to GitHub Pages.
 
 ---
@@ -102,7 +101,7 @@ once when the model is constructed, and `run()` is pure arithmetic. Measured ove
 | TypeScript neural network | 795.4 ms | 8.2 ms | **97x** |
 | TypeScript XGBoost | 310.8 ms | 2.3 ms | **133x** |
 
-Parsing itself is now a one time cost of about 0.02 ms for a 20 tree model. Seed parsing also uses
+Parsing itself is now a one-time cost of about 0.02 ms for a 20-tree model. Seed parsing also uses
 string views in C++, so the parameter block, which runs to hundreds of thousands of characters on a
 large ensemble, is never copied.
 
@@ -125,4 +124,4 @@ popular machine learning models.
 - More algorithms and training options
 - Richer debugging views and visualization controls
 - More customizability in the models and algorithms
-- The N class categorical format in the C++ build
+- The N-class categorical format in the C++ build
