@@ -7,7 +7,7 @@ The pipeline has three stages:
 1. **Train** in either the C++ desktop app or the TypeScript web app run on GitHub Pages.
 https://hedgehogdubz.github.io/Machine-Learning-Visualizer/
 2. **Export** the trained model as a seed string with Copy Seed.
-3. **Run** that seed in any RiverML target, in either language (C++, TypeScript)
+3. **Run** that seed in any RiverML target
 
 Seeds and Models work Cross-language. (e.g a saved seed from C++ will work the same in TypeScript and vice versa)
 
